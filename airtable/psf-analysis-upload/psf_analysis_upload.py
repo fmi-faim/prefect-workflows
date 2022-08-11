@@ -187,5 +187,6 @@ with Flow("psf-analsyis-airtable-upload",
 
 flow.storage = GitHub(
     repo="fmi-faim/prefect-workflows",
-    path="airtable/psf-analysis-upload/psf_analysis_upload.py"
+    path="airtable/psf-analysis-upload/psf_analysis_upload.py",
+    ref="psf-analysis-upload-v0.1.0"
 )

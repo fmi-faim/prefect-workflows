@@ -1,5 +1,5 @@
 # Workflow: psf-analsyis-airtable-upload
-This workflow uploads [napari-psf-analysis](https://github.com/fmi-faim/napari-psf-analysis) plugin results which are stored in a dedicated upload directory to [airtable]().
+This workflow uploads [napari-psf-analysis](https://github.com/fmi-faim/napari-psf-analysis) plugin results which are stored in a dedicated upload directory to [airtable](https://airtable.com/).
 The airtable connection is only created if new data is available for upload. 
 
 The napari-psf-analysis plugin generates a small overview png for each 

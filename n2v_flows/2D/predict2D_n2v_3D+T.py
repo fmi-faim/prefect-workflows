@@ -88,7 +88,7 @@ with Flow("Predict 2D N2V [3D+T]",
 flow.storage = GitHub(
     repo="fmi-faim/prefect-workflows",
     path="n2v_flows/2D/predict2D_n2v_3D+T.py",
-    ref="dev-n2v_flows",
+    ref="n2v_flows-v0.1.0",
     access_token_secret="github-access-token_buchtimo"
 )
 slurm_config_path = join(Secret("prefect-slurm-configs").get(),

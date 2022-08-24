@@ -1,6 +1,7 @@
 import json
 from os.path import join, basename
 
+import numpy as np
 from csbdeep.io import save_tiff_imagej_compatible
 from n2v_tasks.prefect_task.environment_utils import \
     add_to_slurm_flow_run_table_task, save_slurm_job_info_task, \
@@ -22,7 +23,11 @@ from tifffile import imread
 def predict(model_dir, model_name, file, n_tiles, save_dir):
     model = load_model(model_dir=model_dir, model_name=model_name)
     img = imread(file)
-    pred = model.predict(img, axes="YX", n_tiles=n_tiles).astype(img.dtype)
+    dtype = img.dtype
+    iinfo = np.iinfo(dtype)
+    pred = np.clip(model.predict(img, axes="YX", n_tiles=n_tiles),
+                   a_min=iinfo.min,
+                   a_max=iinfo.max).astype(dtype)
     save_tiff_imagej_compatible(join(save_dir, basename(file)), pred,
                                 axes="YX")
 

@@ -25,13 +25,16 @@ def predict(model_dir, model_name, file, n_tiles, save_dir):
     model = load_model(model_dir=model_dir, model_name=model_name)
     img = imread(file)
     dtype = img.dtype
+    iinfo = np.iinfo(dtype)
     pred = np.zeros_like(img)
 
     for i, s in enumerate(img):
         for j, z in enumerate(s):
             z_pred = model.predict(z.astype(np.float32), axes="YX",
                                    n_tiles=n_tiles)
-            pred[i, j] = z_pred.astype(dtype)
+            pred[i, j] = np.clip(z_pred,
+                                 a_min=iinfo.min,
+                                 a_max=iinfo.max).astype(dtype)
     save_tiff_imagej_compatible(join(save_dir, basename(file)), pred,
                                 axes="TZYX")
 

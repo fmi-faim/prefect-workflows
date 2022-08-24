@@ -85,7 +85,7 @@ with Flow("Predict N2V [2D]",
 flow.storage = GitHub(
     repo="fmi-faim/prefect-workflows",
     path="n2v_flows/2D/predict2D_n2v_2D.py",
-    ref="n2v_flows-v0.1.0",
+    ref="n2v_flows-v0.1.1",
     access_token_secret="github-access-token_buchtimo"
 )
 

@@ -2,14 +2,56 @@ import argparse
 import os.path
 from pathlib import Path
 
+import prefect
+from em_tasks.export import (
+    export_normalized_uint8,
+    export_uint16,
+    get_files,
+    load_ser_file,
+    process_metadata,
+)
+from em_tasks.stitch import stitch_tiles
 from prefect import Flow, Parameter, task, unmapped
-
-from em_tasks.prefect_task.export import get_files_task, process_metadata_task
-from em_tasks.prefect_task.stitch import stitch_tiles_task
-from em_tasks.task.export import load_ser_file, export_uint16, export_normalized_uint8
 from prefect.storage import GitHub
 
 TILE_CONF_NAME = "TileConfiguration.txt"
+
+
+@task()
+def get_files_task(input_dir, filename_filter):
+    return get_files(input_dir=input_dir, filename_filter=filename_filter, logger=prefect.context.get("logger"))
+
+
+@task(nout=3)
+def load_ser_file_task(ser_file):
+    return load_ser_file(ser_file=ser_file, logger=prefect.context.get("logger"))
+
+
+@task()
+def export_uint16_task(data, pixel_size, save_dir, basename, prefix="16bit"):
+    export_uint16(data=data, pixel_size=pixel_size, save_dir=save_dir, basename=basename, prefix=prefix)
+
+
+@task()
+def export_normalized_uint8_task(data, pixel_size, save_dir, basename, prefix, intensity_range):
+    export_normalized_uint8(data=data,
+                            pixel_size=pixel_size,
+                            save_dir=save_dir,
+                            basename=basename,
+                            prefix=prefix,
+                            intensity_range=intensity_range
+                            )
+
+
+@task()
+def process_metadata_task(metadata_list, save_dir, prefixes, filename):
+    process_metadata(metadata_list=metadata_list, save_dir=save_dir, filename=filename,
+                     prefixes=prefixes, logger=prefect.context.get("logger"))
+
+
+@task()
+def stitch_tiles_task(input_dir, tileconf_filename, save_path=None, logger=prefect.context.get("logger")):
+    stitch_tiles(input_dir, tileconf_filename, save_path)
 
 
 @task(log_stdout=True)
@@ -46,12 +88,12 @@ with Flow("ser-stitching") as flow:
     # export_normalized_uint8_task.map(data=data, pixel_size=pixel_size, save_dir=unmapped(save_dir),
     #                                  basename=basenames, intensity_range=intensity_range)
     # save_position_file from metadata
-    process_metadata = process_metadata_task(metadata_list=metadata, save_dir=save_dir, prefixes=["8bit", "16bit"],
-                          filename=TILE_CONF_NAME)
+    metadata_task = process_metadata_task(metadata_list=metadata, save_dir=save_dir, prefixes=["8bit", "16bit"],
+                                             filename=TILE_CONF_NAME)
     # stitch tiles
     subdir = path_join_task(save_dir, "8bit")
     stitch_tiles_task(input_dir=subdir, tileconf_filename=TILE_CONF_NAME,
-                      upstream_tasks=[process_metadata])
+                      upstream_tasks=[metadata_task])
 
 flow.storage = GitHub(
     repo="fmi-faim/prefect-workflows",

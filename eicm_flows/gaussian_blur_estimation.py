@@ -95,13 +95,13 @@ with Flow(name="EICM with Gaussian Blur",
     save_matrix_task(matrix=matrix,
                      save_dir=output_dir,
                      name=name,
-                     suffix="eicm-blur")
+                     suffix="eicm-gaussian-blur")
 
     info_txt(save_dir=output_dir,
              name=name,
              mip_path=mip_path,
              sigma=sigma,
-             suffix="eicm-fit-polynomial")
+             suffix="eicm-gaussian-blur")
 
 flow.storage = GitHub(
     repo="fmi-faim/prefect-workflows",

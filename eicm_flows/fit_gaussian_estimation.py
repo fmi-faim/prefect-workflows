@@ -137,7 +137,7 @@ with Flow(name="EICM with Gaussian Fit",
              offset=popt[1],
              mu_x=popt[2],
              mu_y=popt[3],
-             suffix="eicm-fit-polynomial")
+             suffix="eicm-fit-gaussian")
 
 flow.storage = GitHub(
     repo="fmi-faim/prefect-workflows",

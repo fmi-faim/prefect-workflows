@@ -42,7 +42,8 @@ def fit_polynomial(mip, polynomial_degree, order):
 
 
 @task()
-def info_txt(save_dir, name, mip_path, polynomial_degree, order, suffix):
+def info_txt(save_dir, name, mip_path, polynomial_degree, order,
+             poly_str, suffix):
     n, ext = splitext(name)
     tmp = join(save_dir, n + "_" + suffix)
     save_path = tmp

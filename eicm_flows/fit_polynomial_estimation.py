@@ -18,7 +18,7 @@ from tifffile import imwrite, imread
 
 @task(nout=3)
 def load_img_task(path: str):
-    return imread(path), dirname(path), basename(path)
+    return np.squeeze(imread(path)), dirname(path), basename(path)
 
 
 @task()
@@ -67,6 +67,9 @@ def info_txt(save_dir, name, mip_path, polynomial_degree, order, suffix):
            f"* `polynomial_degree`: {polynomial_degree}\n" \
            f"* `order`: {order}\n" \
            "\n" \
+           "## Polynomial:\n" \
+           f"f(X, Y) = {poly_str}\n" \
+           "\n" \
            "## Packages:\n" \
            "* [https://github.com/fmi-faim/eicm](" \
            f"https://github.com/fmi-faim/eicm): v{eicm_version}\n" \
@@ -110,6 +113,7 @@ with Flow(name="EICM with Polynomial Fit",
              mip_path=mip_path,
              polynomial_degree=polynomial_degree,
              order=order,
+             poly_str=poly_str,
              suffix="eicm-fit-polynomial")
 
 flow.storage = GitHub(

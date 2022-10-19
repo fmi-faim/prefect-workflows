@@ -2,6 +2,7 @@ import argparse
 from datetime import datetime
 from os.path import splitext, join, exists, dirname, basename
 
+import numpy as np
 import pkg_resources
 from eicm.estimator.gaussian_blur import create_blurred_illumination_matrix
 from eicm.estimator.utils import normalize_matrix
@@ -16,7 +17,7 @@ from tifffile import imread, imwrite
 
 @task(nout=3)
 def load_img_task(path: str):
-    return imread(path), dirname(path), basename(path)
+    return np.squeeze(imread(path)), dirname(path), basename(path)
 
 
 @task()

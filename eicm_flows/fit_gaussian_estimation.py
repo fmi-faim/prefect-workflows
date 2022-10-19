@@ -19,7 +19,7 @@ from tifffile import imread, imwrite
 
 @task(nout=3)
 def load_img_task(path: str):
-    return imread(path), dirname(path), basename(path)
+    return np.squeeze(imread(path)), dirname(path), basename(path)
 
 
 @task()

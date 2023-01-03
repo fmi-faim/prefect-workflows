@@ -1,23 +1,21 @@
 import argparse
+import os
 from datetime import datetime
-from os.path import splitext, join, exists, dirname, basename
+from os.path import splitext, join, dirname, basename
+from typing import Literal
 
 import numpy as np
 import pkg_resources
-import prefect
+from cpr.image.ImageTarget import ImageTarget
 from eicm.estimator.gaussian2D_fit import get_coords, fit_gaussian_2d, \
     compute_fitted_matrix
 from eicm.estimator.utils import normalize_matrix
-from futils.io import create_output_dir
-from prefect import task, Flow
-from prefect.core import Parameter
-from prefect.run_configs import LocalRun
-from prefect.storage import GitHub
-from prefect.tasks.secrets import PrefectSecret
+from prefect import task, flow
+from prefect.context import get_run_context
 from tifffile import imread, imwrite
 
 
-@task(nout=3)
+@task()
 def load_img_task(path: str):
     return imread(path), dirname(path), basename(path)
 
@@ -41,7 +39,7 @@ def get_coords_task(img):
     return get_coords(img)
 
 
-@task(nout=2)
+@task()
 def fit_gaussian_2d_task(img, coords):
     return fit_gaussian_2d(data=img,
                            coords=coords)
@@ -55,20 +53,28 @@ def compute_fitted_matrix_task(coords, ellipsoid_parameters, mip):
 
 
 @task()
-def info_txt(save_dir, name, mip_path, amplitude,
+def estimate_correction_matrix(mip_path: str, output_dir: str):
+    n, ext = splitext(basename(mip_path))
+    save_path = join(output_dir, f"{n}_gaussian-fit{ext}")
+    matrix = ImageTarget.from_path(save_path)
+
+    mip = imread(mip_path)
+    coords = get_coords(mip)
+    popt, pcov = fit_gaussian_2d(mip, coords)
+
+    matrix.set_data(normalize_matrix(compute_fitted_matrix(coords=coords,
+                                                           ellipsoid_parameters=popt,
+                                                           shape=mip.shape)))
+
+    return matrix, popt
+
+
+@task()
+def info_txt(save_dir, matrix: ImageTarget, mip_path, amplitude,
              offset,
              mu_x,
-             mu_y,
-             suffix):
-    n, ext = splitext(name)
-    tmp = join(save_dir, n + "_" + suffix)
-    save_path = tmp
-    c = 1
-    while exists(save_path + ".md"):
-        save_path = tmp + "_" + str(c)
-        c += 1
-
-    save_path = save_path + ".md"
+             mu_y):
+    save_path = join(save_dir, f"{matrix.get_name()}-{matrix.data_hash}.md")
 
     eicm_version = pkg_resources.get_distribution("eicm").version
     now = datetime.now().strftime("%Y/%m/%d, %H:%M:%S")
@@ -96,61 +102,64 @@ def info_txt(save_dir, name, mip_path, amplitude,
         f.write(info)
 
 
-with Flow(name="EICM with Gaussian Fit",
-          run_config=LocalRun(labels=["CPU"])) as flow:
-    mip_path = Parameter("mip_path", default="/path/to/mip")
-    group = Parameter("group", default="gmicro")
-    user = Parameter("user", default="buchtimo")
-    output_root_dir = PrefectSecret("output-root-dir")
+groups = Literal[
+    "garber",
+    "gbuehler",
+    "gcaroni",
+    "gchao",
+    "gdiss",
+    "gfelsenb",
+    "gfriedri",
+    "ggiorget",
+    "ggrossha",
+    "ginforma",
+    "gkeller",
+    "gliberal",
+    "gluthi",
+    "gmatthia",
+    "gmicro",
+    "gpeters",
+    "grijli",
+    "gschub",
+    "gthoma",
+    "gtsiairi",
+    "gturco",
+    "gzenke"
+]
 
-    logger = prefect.context.get("logger")
 
-    mip, parent_dir, name = load_img_task(path=mip_path)
-
-    coords = get_coords_task(mip)
-
-    popt, pcov = fit_gaussian_2d_task(img=mip,
-                                      coords=coords)
-    logger.info(f"Found fit with popt = {popt} and corresponding pcov "
-                f"= {pcov}.")
-
-    matrix = compute_fitted_matrix_task(coords=coords,
-                                        ellipsoid_parameters=popt,
-                                        mip=mip)
-
-    matrix = normalize_task(matrix=matrix)
-
-    output_dir = create_output_dir(root_dir=output_root_dir,
-                                   group=group,
-                                   user=user,
-                                   flow_name="eicm-gaussian-fit")
-
-    save_matrix_task(matrix=matrix,
-                     save_dir=output_dir,
-                     name=name,
-                     suffix="eicm-fit-gaussian")
-
-    info_txt(save_dir=output_dir,
-             name=name,
-             mip_path=mip_path,
-             amplitude=popt[0],
-             offset=popt[1],
-             mu_x=popt[2],
-             mu_y=popt[3],
-             suffix="eicm-fit-polynomial")
-
-flow.storage = GitHub(
-    repo="fmi-faim/prefect-workflows",
-    path="eicm_flows/fit_gaussian_estimation.py",
-    ref="eicm-v0.1.1",
-    access_token_secret="github-access-token_buchtimo"
+@flow(
+    name="EICM with Gaussian Fit"
 )
+def eicm_gaussian_fit(
+        mip_path: str = "/path/to/mip",
+        group: str = groups,
+):
+    flow_run_name = get_run_context().flow_run.name
+
+    output_dir = join("/tungstenfs/scratch/gmicro_prefect",
+                      group,
+                      "eicm",
+                      flow_run_name)
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    matrix, popt = estimate_correction_matrix.submit(mip_path=mip_path,
+                                                     output_dir=output_dir)
+
+    info_txt.submit(save_dir=output_dir,
+                    matrix=matrix,
+                    mip_path=mip_path,
+                    amplitude=popt[0],
+                    offset=popt[1],
+                    mu_x=popt[2],
+                    mu_y=popt[3])
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--mip_path", type=str)
     parser.add_argument("--group", type=str)
-    parser.add_argument("--user", type=str)
 
     args = parser.parse_args()
-    flow.run(mip_path=args.mip_path)
+    eicm_gaussian_fit(mip_path=args.mip_path, group=args.group)

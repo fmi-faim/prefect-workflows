@@ -1,7 +1,7 @@
 import os
 from glob import glob
 from os.path import basename, join, splitext
-from typing import Literal, List
+from typing import Literal
 
 import numpy as np
 import prefect.context
@@ -58,10 +58,12 @@ def create_shading_reference(input_dir: str, z_plane: int, output_dir: str):
 
 
 @task()
-def write_info_md(reference: ImageTarget, flow_repo: str,
+def write_info_md(reference: ImageTarget,
+                  context: prefect.context.FlowRunContext,
+                  flow_repo:
+                  str,
                   input_dir: str, z_plane: int, microscope: str,
                   output_dir: str):
-    context = prefect.context.FlowRunContext()
     name = context.flow.name
     date = context.flow_run.state.timestamp.strftime("%Y/%m/%d, %H:%M:%S")
     file_name = basename(reference.get_path())
@@ -70,7 +72,7 @@ def write_info_md(reference: ImageTarget, flow_repo: str,
     save_path = splitext(reference.get_path())[0] + ".md"
 
     text = f"# {name}\n" \
-           f"Source: [flow_repo](flow_repo)\n" \
+           f"Source: [{flow_repo}]({flow_repo})\n" \
            f"Date: {date}\n" \
            f"\n" \
            f"`{name}` is a service provided by the Facility for Advanced " \
@@ -146,7 +148,9 @@ def create_shading_reference_yokogawa(input_dir: str =
         z_plane=z_plane,
         output_dir=final_out_dir)
 
-    write_info_md.map(references, unmapped(flow_repo),
+    write_info_md.map(references, unmapped(prefect.get_run_context()),
+                      unmapped(
+                          flow_repo),
                       unmapped(input_dir), unmapped(z_plane), unmapped(
             microscope),
                       unmapped(output_dir))

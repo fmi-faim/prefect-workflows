@@ -148,11 +148,8 @@ def create_shading_reference_yokogawa(input_dir: str =
         z_plane=z_plane,
         output_dir=final_out_dir)
 
-    write_info_md.map(references, unmapped(get_run_context()),
-                      unmapped(
-                          flow_repo),
-                      unmapped(input_dir), unmapped(z_plane), unmapped(
-            microscope),
-                      unmapped(output_dir))
+    for ref in list(references):
+        write_info_md(ref, get_run_context(), flow_repo, input_dir, z_plane,
+                      microscope, output_dir)
 
     return references

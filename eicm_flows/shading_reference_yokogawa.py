@@ -60,7 +60,7 @@ def create_shading_reference(input_dir: str, z_plane: int, output_dir: str):
       cache_result_in_memory=False,
       persist_result=True,
       result_serializer=cpr_serializer(),
-      result_storage="local-file-system/buchtimo-laptop-storage",
+      result_storage="local-file-system/test-eicm",
       task_runner=DaskTaskRunner(
           cluster_class="dask_jobqueue.SLURMCluster",
           cluster_kwargs={

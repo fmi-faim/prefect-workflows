@@ -46,7 +46,9 @@ def create_shading_reference(input_dir: str, z_plane: int, output_dir: str):
     for ch, projection in projections.items():
         out_name = get_output_name(acquistion_date=acq_date,
                                    channel=channels[str(int(ch[1:]))])
-        out_img = ImageTarget.from_path(join(output_dir, acq_date, out_name),
+        final_out_dir = join(output_dir, acq_date)
+        os.makedirs(final_out_dir, exist_ok=True)
+        out_img = ImageTarget.from_path(join(final_out_dir, out_name),
                                         resolution=[1 / px_size, 1 / px_size],
                                         metadata={"axes": "YX",
                                                   "unit": px_unit}
@@ -135,17 +137,17 @@ def create_shading_reference_yokogawa(input_dir: str =
                                       microscope: Microscopes = "CV7000",
                                       z_plane: int = 33,
                                       output_dir: str = "/tungstenfs/scratch/gmicro_hcs/gmicro/"):
-    final_out_dir = join(output_dir, microscope, "Maintenance",
+    output_dir = join(output_dir, microscope, "Maintenance",
                          "Shading_Reference")
 
-    os.makedirs(final_out_dir, exist_ok=True)
+    os.makedirs(output_dir, exist_ok=True)
 
     flow_repo = "https://github.com/fmi-faim/prefect-workflows/blob/main/eicm_flows"
 
     references = create_shading_reference.submit(
         input_dir=input_dir,
         z_plane=z_plane,
-        output_dir=final_out_dir)
+        output_dir=output_dir)
 
     context = get_run_context()
     for ref in list(references.result()):

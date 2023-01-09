@@ -4,7 +4,6 @@ from os.path import basename, join, splitext
 from typing import Literal
 
 import numpy as np
-import prefect.context
 from cpr.Serializer import cpr_serializer
 from cpr.image.ImageTarget import ImageTarget
 from cpr.utilities.utilities import task_input_hash
@@ -12,6 +11,7 @@ from eicm.preprocessing.yokogawa import get_metadata, create_table, \
     build_field_stacks_for_channels, subtract_dark_images, \
     compute_median_projection, get_output_name
 from prefect import flow, task, unmapped
+from prefect.context import FlowRunContext, get_run_context
 from prefect.software.pip import pkg_resources
 from prefect_dask import DaskTaskRunner
 
@@ -46,7 +46,7 @@ def create_shading_reference(input_dir: str, z_plane: int, output_dir: str):
     for ch, projection in projections.items():
         out_name = get_output_name(acquistion_date=acq_date,
                                    channel=channels[str(int(ch[1:]))])
-        out_img = ImageTarget.from_path(join(output_dir, out_name),
+        out_img = ImageTarget.from_path(join(output_dir, acq_date, out_name),
                                         resolution=[1 / px_size, 1 / px_size],
                                         metadata={"axes": "YX",
                                                   "unit": px_unit}
@@ -59,7 +59,7 @@ def create_shading_reference(input_dir: str, z_plane: int, output_dir: str):
 
 @task()
 def write_info_md(reference: ImageTarget,
-                  context: prefect.context.FlowRunContext,
+                  context: FlowRunContext,
                   flow_repo:
                   str,
                   input_dir: str, z_plane: int, microscope: str,
@@ -148,7 +148,7 @@ def create_shading_reference_yokogawa(input_dir: str =
         z_plane=z_plane,
         output_dir=final_out_dir)
 
-    write_info_md.map(references, unmapped(prefect.get_run_context()),
+    write_info_md.map(references, unmapped(get_run_context()),
                       unmapped(
                           flow_repo),
                       unmapped(input_dir), unmapped(z_plane), unmapped(

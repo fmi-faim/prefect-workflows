@@ -91,7 +91,7 @@ def create_shading_reference(input_dir: str, z_plane: int, output_dir: str):
       ))
 def create_shading_reference_yokogawa(input_dir: str =
                                       "/tungstenfs/scratch/gmicro/reitsabi/CV7000/Flatfield_correction_tests/20221221-Field-illumination-QC_20221221_143935/Dyes_60xW_Cellvis/",
-                                      microscope: Microscopes = "CV700",
+                                      microscope: Microscopes = "CV7000",
                                       z_plane: int = 33,
                                       output_dir: str = "/tungstenfs/scratch/gmicro_hcs/gmicro/"):
 

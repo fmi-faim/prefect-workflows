@@ -57,11 +57,10 @@ def create_shading_reference(input_dir: str, z_plane: int, output_dir: str):
     return tuple(references)
 
 
-@task()
+@task(cache_key_fn=task_input_hash)
 def write_info_md(reference: ImageTarget,
                   context: FlowRunContext,
-                  flow_repo:
-                  str,
+                  flow_repo: str,
                   input_dir: str, z_plane: int, microscope: str,
                   output_dir: str):
     name = context.flow.name
@@ -148,8 +147,9 @@ def create_shading_reference_yokogawa(input_dir: str =
         z_plane=z_plane,
         output_dir=final_out_dir)
 
+    context = get_run_context()
     for ref in list(references.result()):
-        write_info_md(ref, get_run_context(), flow_repo, input_dir, z_plane,
+        write_info_md(ref, context, flow_repo, input_dir, z_plane,
                       microscope, output_dir)
 
     return references

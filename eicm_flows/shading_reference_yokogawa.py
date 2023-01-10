@@ -1,7 +1,7 @@
 import os
 from glob import glob
 from os.path import basename, join, splitext
-from typing import Literal
+from typing import Literal, Tuple
 
 import numpy as np
 from cpr.Serializer import cpr_serializer
@@ -60,43 +60,44 @@ def create_shading_reference(input_dir: str, z_plane: int, output_dir: str):
 
 
 @task(cache_key_fn=task_input_hash)
-def write_info_md(reference: ImageTarget,
+def write_info_md(references: Tuple[ImageTarget],
                   context: FlowRunContext,
                   flow_repo: str,
                   input_dir: str, z_plane: int, microscope: str,
                   output_dir: str):
     name = context.flow.name
     date = context.flow_run.state.timestamp.strftime("%Y/%m/%d, %H:%M:%S")
-    file_name = basename(reference.get_path())
     eicm_version = pkg_resources.get_distribution("eicm").version
 
-    save_path = splitext(reference.get_path())[0] + ".md"
+    for reference in references:
+        file_name = basename(reference.get_path())
+        save_path = splitext(reference.get_path())[0] + ".md"
 
-    text = f"# {name}\n" \
-           f"Source: [{flow_repo}]({flow_repo})\n" \
-           f"Date: {date}\n" \
-           f"\n" \
-           f"`{name}` is a service provided by the Facility for Advanced " \
-           f"Imaging and Microscopy (FAIM) at FMI for biomedical research. " \
-           f"Consult with FAIM on appropriate usage.\n" \
-           f"\n" \
-           f"## Summary\n" \
-           f"The computed shading reference ({file_name}) is the median " \
-           f"projection over n background (dark image) subtracted positions " \
-           f"in the selected Z-plane.\n" \
-           f"\n" \
-           f"## Parameters\n" \
-           f"* `input_dir`: {input_dir}\n" \
-           f"* `z_plane`: {z_plane}\n" \
-           f"* `microscope`: {microscope}\n" \
-           f"* `output_dir`: {output_dir}\n" \
-           f"\n" \
-           f"## Packages\n" \
-           f"* [https://github.com/fmi-faim/eicm](" \
-           f"https://github.com/fmi-faim/eicm): v{eicm_version}\n"
+        text = f"# {name}\n" \
+               f"Source: [{flow_repo}]({flow_repo})\n" \
+               f"Date: {date}\n" \
+               f"\n" \
+               f"`{name}` is a service provided by the Facility for Advanced " \
+               f"Imaging and Microscopy (FAIM) at FMI for biomedical research. " \
+               f"Consult with FAIM on appropriate usage.\n" \
+               f"\n" \
+               f"## Summary\n" \
+               f"The computed shading reference ({file_name}) is the median " \
+               f"projection over n background (dark image) subtracted positions " \
+               f"in the selected Z-plane.\n" \
+               f"\n" \
+               f"## Parameters\n" \
+               f"* `input_dir`: {input_dir}\n" \
+               f"* `z_plane`: {z_plane}\n" \
+               f"* `microscope`: {microscope}\n" \
+               f"* `output_dir`: {output_dir}\n" \
+               f"\n" \
+               f"## Packages\n" \
+               f"* [https://github.com/fmi-faim/eicm](" \
+               f"https://github.com/fmi-faim/eicm): v{eicm_version}\n"
 
-    with open(save_path, "w") as f:
-        f.write(text)
+        with open(save_path, "w") as f:
+            f.write(text)
 
 
 @flow(name="Create Shading Reference [Yokogawa]",
@@ -149,9 +150,7 @@ def create_shading_reference_yokogawa(input_dir: str =
         z_plane=z_plane,
         output_dir=output_dir)
 
-    context = get_run_context()
-    for ref in references.result():
-        write_info_md.submit(ref, context, flow_repo, input_dir, z_plane,
+    write_info_md.submit(references, get_run_context(), flow_repo, input_dir, z_plane,
                       microscope, output_dir)
 
     return references

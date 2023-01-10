@@ -1,5 +1,5 @@
 prefect
-eicm @ git+https://github.com/fmi-faim/eicm@v0.1.1
-futils @ git+https://github.com/fmi-faim/flow-utils@v0.1.0
+eicm @ git+https://github.com/fmi-faim/eicm@v0.1.2
 tifffile
 imagecodecs
+faim_prefect @ git+https://github.com/fmi-faim/faim-prefect@main

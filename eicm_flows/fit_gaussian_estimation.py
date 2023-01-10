@@ -147,12 +147,13 @@ def eicm_gaussian_fit(
         group: Choices.load("fmi-groups").get() = "gmicro",
         output_dir: str = LocalFileSystem.load("tungsten-gmicro-hcs").basepath
 ):
-    output_dir = join(output_dir, group, microscope, "Maintenance",
+    output_dir_ = join(output_dir, group, microscope, "Maintenance",
                       "eicm")
 
-    os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(output_dir_, exist_ok=True)
 
-    matrix, popt = estimate_correction_matrix.submit(mip_path=shading_reference,
+    matrix, popt = estimate_correction_matrix.submit(
+        shading_reference=shading_reference,
                                                      output_dir=output_dir).result()
 
     write_gaussian_fit_info_md.submit(matrix=matrix,

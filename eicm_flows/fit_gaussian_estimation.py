@@ -154,7 +154,7 @@ def eicm_gaussian_fit(
 
     matrix, popt = estimate_correction_matrix.submit(
         shading_reference=shading_reference,
-                                                     output_dir=output_dir).result()
+        output_dir=output_dir_).result()
 
     write_gaussian_fit_info_md.submit(matrix=matrix,
                                       name=get_run_context().flow.name,

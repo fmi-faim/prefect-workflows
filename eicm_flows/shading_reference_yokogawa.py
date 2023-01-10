@@ -55,8 +55,7 @@ def create_shading_reference(input_dir: str, z_plane: int, output_dir: str):
         os.makedirs(final_out_dir, exist_ok=True)
         out_img = ImageTarget.from_path(join(final_out_dir, out_name),
                                         resolution=[1e4 / px_size,
-                                                    1e4 / px_size,
-                                                    "CENTIMETER"],
+                                                    1e4 / px_size],
                                         metadata={"axes": "YX",
                                                   "PhysicalSizeX": px_size,
                                                   "PhysicalSizeXUnit": px_unit,
@@ -72,7 +71,7 @@ def create_shading_reference(input_dir: str, z_plane: int, output_dir: str):
 @task(cache_key_fn=task_input_hash)
 def write_info_md(references: Tuple[ImageTarget],
                   name: str,
-                  input_dir: str, z_plane: int, microscope: str,
+                  input_dir: str, z_plane: int, microscope: str, group: str,
                   output_dir: str, context: Dict):
     date = datetime.now().strftime("%Y/%m/%d, %H:%M:%S")
     eicm_version = pkg_resources.get_distribution("eicm").version
@@ -97,8 +96,9 @@ def write_info_md(references: Tuple[ImageTarget],
                f"\n" \
                f"## Parameters\n" \
                f"* `input_dir`: {input_dir}\n" \
-               f"* `z_plane`: {z_plane}\n" \
                f"* `microscope`: {microscope}\n" \
+               f"* `z_plane`: {z_plane}\n" \
+               f"* `group`: {group}\n" \
                f"* `output_dir`: {output_dir}\n" \
                f"\n" \
                f"## Packages\n" \
@@ -163,8 +163,9 @@ def create_shading_reference_yokogawa(input_dir: str =
         output_dir=output_dir)
 
     context = get_prefect_context(get_run_context())
-    write_info_md.submit(references, get_run_context().flow.name,
-                         input_dir, z_plane,
-                         microscope, output_dir, context)
+    write_info_md.submit(references, name=get_run_context().flow.name,
+                         input_dir=input_dir, z_plane=z_plane,
+                         microscope=microscope, group=group,
+                         output_dir=output_dir, context=context)
 
     return references

@@ -63,6 +63,7 @@ def create_shading_reference(input_dir: str, z_plane: int, output_dir: str):
 @task(cache_key_fn=task_input_hash)
 def write_info_md(references: Tuple[ImageTarget],
                   name: str,
+                  id: str,
                   flow_repo: str,
                   input_dir: str, z_plane: int, microscope: str,
                   output_dir: str):
@@ -74,6 +75,7 @@ def write_info_md(references: Tuple[ImageTarget],
         save_path = splitext(reference.get_path())[0] + ".md"
 
         text = f"# {name}\n" \
+               f"Prefect Flow-Run ID: {id}\n" \
                f"Source: [{flow_repo}]({flow_repo})\n" \
                f"Date: {date}\n" \
                f"\n" \
@@ -150,7 +152,9 @@ def create_shading_reference_yokogawa(input_dir: str =
         z_plane=z_plane,
         output_dir=output_dir)
 
-    write_info_md.submit(references, get_run_context().flow_run.name, flow_repo, input_dir, z_plane,
+    write_info_md.submit(references, get_run_context().flow.name,
+                         get_run_context().flow_run.id,
+                         flow_repo, input_dir, z_plane,
                       microscope, output_dir)
 
     return references

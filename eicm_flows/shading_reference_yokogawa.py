@@ -54,9 +54,14 @@ def create_shading_reference(input_dir: str, z_plane: int, output_dir: str):
         final_out_dir = join(output_dir, acq_date)
         os.makedirs(final_out_dir, exist_ok=True)
         out_img = ImageTarget.from_path(join(final_out_dir, out_name),
-                                        resolution=[1 / px_size, 1 / px_size],
+                                        resolution=[1e4 / px_size,
+                                                    1e4 / px_size,
+                                                    "CENTIMETER"],
                                         metadata={"axes": "YX",
-                                                  "unit": px_unit}
+                                                  "PhysicalSizeX": px_size,
+                                                  "PhysicalSizeXUnit": px_unit,
+                                                  "PhysicalSizeY": px_size,
+                                                  "PhysicalSizeYUnit": px_unit,}
                                         )
         out_img.set_data(projection.astype(np.float32))
         references.append(out_img)

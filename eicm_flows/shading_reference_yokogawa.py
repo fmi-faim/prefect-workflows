@@ -132,7 +132,7 @@ def write_info_md(references: Tuple[ImageTarget],
                   "10m",
               ],
               "job_script_prologue": [
-                  "conda run -p /tungstenfs/scratch/gmicro_share/_prefect/miniconda3/envs/airtable python /tungstenfs/scratch/gmicro_share/_prefect/airtable/log-slurm-job.py --config /tungstenfs/scratch/gmicro/_prefect/airtable/slurm-job-log.ini"
+                  String.load("log-slurm-job-to-airtable-cmd").value
               ],
           },
           adapt_kwargs={

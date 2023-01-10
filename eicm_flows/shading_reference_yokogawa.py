@@ -107,9 +107,6 @@ def write_info_md(references: Tuple[ImageTarget],
             f.write(text)
 
 
-fmi_groups = Choices.load("fmi-groups")
-
-
 @flow(name="Create Shading Reference [Yokogawa]",
       cache_result_in_memory=False,
       persist_result=True,
@@ -135,7 +132,7 @@ fmi_groups = Choices.load("fmi-groups")
                   "10m",
               ],
               "job_script_prologue": [
-                  String.load("log-slurm-job-to-airtable-cmd")
+                  "conda run -p /tungstenfs/scratch/gmicro_share/_prefect/miniconda3/envs/airtable python /tungstenfs/scratch/gmicro_share/_prefect/airtable/log-slurm-job.py --config /tungstenfs/scratch/gmicro/_prefect/airtable/slurm-job-log.ini"
               ],
           },
           adapt_kwargs={
@@ -147,9 +144,9 @@ def create_shading_reference_yokogawa(input_dir: str =
                                       "/tungstenfs/scratch/gmicro/reitsabi/CV7000/Flatfield_correction_tests/20221221-Field-illumination-QC_20221221_143935/Dyes_60xW_Cellvis/",
                                       microscope: Microscopes = "CV7000",
                                       z_plane: int = 33,
-                                      group: str = fmi_groups,
+                                      group: Choices.load("fmi-groups").get() = "gmicro",
                                       output_dir: str = LocalFileSystem.load(
-                                          "tungsten-gmirco-hcs")):
+                                          "tungsten-gmirco-hcs").basepath):
     output_dir = join(output_dir, group, microscope, "Maintenance",
                       "Shading_Reference")
 

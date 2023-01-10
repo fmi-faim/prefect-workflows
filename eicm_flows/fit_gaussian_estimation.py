@@ -54,17 +54,17 @@ def estimate_correction_matrix(shading_reference: str, output_dir: str):
 
 
 @task(cache_key_fn=task_input_hash)
-def write_info_md(matrix: ImageTarget,
-                  name: str,
-                  shading_reference: str,
-                  microscope: str,
-                  group: str,
-                  output_dir: str,
-                  amplitude: float,
-                  background: float,
-                  mu_x: float,
-                  mu_y: float,
-                  context: Dict):
+def write_gaussian_fit_info_md(matrix: ImageTarget,
+                               name: str,
+                               shading_reference: str,
+                               microscope: str,
+                               group: str,
+                               output_dir: str,
+                               amplitude: float,
+                               background: float,
+                               mu_x: float,
+                               mu_y: float,
+                               context: Dict):
     date = datetime.now().strftime("%Y/%m/%d, %H:%M:%S")
     eicm_version = pkg_resources.get_distribution("eicm").version
     flow_repo = "https://github.com/fmi-faim/prefect-workflows/blob/main/eicm_flows"
@@ -155,16 +155,16 @@ def eicm_gaussian_fit(
     matrix, popt = estimate_correction_matrix.submit(mip_path=shading_reference,
                                                      output_dir=output_dir).result()
 
-    write_info_md.submit(matrix=matrix,
-    name=get_run_context().flow.name,
-    shading_reference=shading_reference,
-    microscope=microscope,
-    group=group,
-    output_dir=output_dir,
-    amplitude=popt[0],
-    background=popt[1],
-    mu_x=popt[2],
-    mu_y=popt[3],
-    context=get_prefect_context(get_run_context()))
+    write_gaussian_fit_info_md.submit(matrix=matrix,
+                                      name=get_run_context().flow.name,
+                                      shading_reference=shading_reference,
+                                      microscope=microscope,
+                                      group=group,
+                                      output_dir=output_dir,
+                                      amplitude=popt[0],
+                                      background=popt[1],
+                                      mu_x=popt[2],
+                                      mu_y=popt[3],
+                                      context=get_prefect_context(get_run_context()))
 
 

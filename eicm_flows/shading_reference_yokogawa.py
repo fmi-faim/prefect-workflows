@@ -151,7 +151,7 @@ def create_shading_reference_yokogawa(input_dir: str =
                                       z_plane: int = 33,
                                       group: Choices.load("fmi-groups").get() = "gmicro",
                                       output_dir: str = LocalFileSystem.load(
-                                          "tungsten-gmirco-hcs").basepath):
+                                          "tungsten-gmicro-hcs").basepath):
     output_dir = join(output_dir, group, microscope, "Maintenance",
                       "Shading_Reference")
 

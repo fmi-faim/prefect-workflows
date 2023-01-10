@@ -1,9 +1,10 @@
 import json
 import os
 from datetime import datetime
-from os.path import splitext, join, basename
+from os.path import splitext, join, basename, dirname
 from typing import Dict
 
+import numpy as np
 import pkg_resources
 from cpr.Serializer import cpr_serializer
 from cpr.image.ImageTarget import ImageTarget
@@ -16,7 +17,6 @@ from faim_prefect.prefect import get_prefect_context
 from prefect import task, flow
 from prefect.blocks.system import String
 from prefect.context import get_run_context
-from prefect.filesystems import LocalFileSystem
 from prefect_dask import DaskTaskRunner
 from tifffile import TiffFile
 
@@ -32,9 +32,9 @@ def load_tiff(path: str):
 
 
 @task(cache_key_fn=task_input_hash)
-def estimate_correction_matrix(shading_reference: str, output_dir: str):
+def estimate_correction_matrix(shading_reference: str):
     n, ext = splitext(basename(shading_reference))
-    save_path = join(output_dir, f"{n}_gaussian-fit{ext}")
+    save_path = join(dirname(shading_reference), f"{n}_gaussian-fit{ext}")
 
     resolution, metadata, data = load_tiff(path=shading_reference)
 
@@ -47,7 +47,7 @@ def estimate_correction_matrix(shading_reference: str, output_dir: str):
 
     matrix.set_data(normalize_matrix(compute_fitted_matrix(coords=coords,
                                                            ellipsoid_parameters=popt,
-                                                           shape=data.shape)))
+                                                           shape=data.shape)).astype(np.float32))
 
 
     return matrix, popt.tolist()
@@ -59,7 +59,6 @@ def write_gaussian_fit_info_md(matrix: ImageTarget,
                                shading_reference: str,
                                microscope: str,
                                group: str,
-                               output_dir: str,
                                amplitude: float,
                                background: float,
                                mu_x: float,
@@ -93,7 +92,6 @@ def write_gaussian_fit_info_md(matrix: ImageTarget,
            f"* `shading_reference`: {shading_reference}\n" \
            f"* `microscope`: {microscope}\n" \
            f"* `group`: {group}\n" \
-           f"* `output_dir`: {output_dir}\n" \
            f"\n" \
            f"## Packages\n" \
            f"* [https://github.com/fmi-faim/eicm](" \
@@ -145,23 +143,15 @@ def eicm_gaussian_fit(
         shading_reference: str = "/path/to/shading_reference",
         microscope: Microscopes = "CV7000",
         group: Choices.load("fmi-groups").get() = "gmicro",
-        output_dir: str = LocalFileSystem.load("tungsten-gmicro-hcs").basepath
 ):
-    output_dir_ = join(output_dir, group, microscope, "Maintenance",
-                      "eicm")
-
-    os.makedirs(output_dir_, exist_ok=True)
-
     matrix, popt = estimate_correction_matrix.submit(
-        shading_reference=shading_reference,
-        output_dir=output_dir_).result()
+        shading_reference=shading_reference).result()
 
     write_gaussian_fit_info_md.submit(matrix=matrix,
                                       name=get_run_context().flow.name,
                                       shading_reference=shading_reference,
                                       microscope=microscope,
                                       group=group,
-                                      output_dir=output_dir,
                                       amplitude=popt[0],
                                       background=popt[1],
                                       mu_x=popt[2],

@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from glob import glob
 from os.path import basename, join, splitext
 from typing import Literal, Tuple
@@ -61,12 +62,11 @@ def create_shading_reference(input_dir: str, z_plane: int, output_dir: str):
 
 @task(cache_key_fn=task_input_hash)
 def write_info_md(references: Tuple[ImageTarget],
-                  context: FlowRunContext,
+                  name: str,
                   flow_repo: str,
                   input_dir: str, z_plane: int, microscope: str,
                   output_dir: str):
-    name = context.flow.name
-    date = context.flow_run.state.timestamp.strftime("%Y/%m/%d, %H:%M:%S")
+    date = datetime.now().strftime("%Y/%m/%d, %H:%M:%S")
     eicm_version = pkg_resources.get_distribution("eicm").version
 
     for reference in references:
@@ -150,7 +150,7 @@ def create_shading_reference_yokogawa(input_dir: str =
         z_plane=z_plane,
         output_dir=output_dir)
 
-    write_info_md.submit(references, get_run_context(), flow_repo, input_dir, z_plane,
+    write_info_md.submit(references, "Create Shading Reference [Yokogawa]", flow_repo, input_dir, z_plane,
                       microscope, output_dir)
 
     return references

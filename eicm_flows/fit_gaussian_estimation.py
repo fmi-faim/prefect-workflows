@@ -50,7 +50,7 @@ def estimate_correction_matrix(shading_reference: str, output_dir: str):
                                                            shape=data.shape)))
 
 
-    return matrix, popt
+    return matrix, popt.tolist()
 
 
 @task(cache_key_fn=task_input_hash)
@@ -117,7 +117,7 @@ def write_gaussian_fit_info_md(matrix: ImageTarget,
           cluster_kwargs={
               "account": "dlthings",
               "queue": "cpu_long",
-              "cores": 1,
+              "cores": 4,
               "processes": 1,
               "memory": "4 GB",
               "walltime": "1:00:00",

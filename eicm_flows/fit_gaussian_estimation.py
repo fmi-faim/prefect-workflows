@@ -57,8 +57,6 @@ def estimate_correction_matrix(shading_reference: str):
 def write_gaussian_fit_info_md(matrix: ImageTarget,
                                name: str,
                                shading_reference: str,
-                               microscope: str,
-                               group: str,
                                amplitude: float,
                                background: float,
                                mu_x: float,
@@ -90,8 +88,6 @@ def write_gaussian_fit_info_md(matrix: ImageTarget,
            f"\n" \
            f"## Parameters\n" \
            f"* `shading_reference`: {shading_reference}\n" \
-           f"* `microscope`: {microscope}\n" \
-           f"* `group`: {group}\n" \
            f"\n" \
            f"## Packages\n" \
            f"* [https://github.com/fmi-faim/eicm](" \
@@ -141,8 +137,6 @@ def write_gaussian_fit_info_md(matrix: ImageTarget,
 )
 def eicm_gaussian_fit(
         shading_reference: str = "/path/to/shading_reference",
-        microscope: Microscopes = "CV7000",
-        group: Choices.load("fmi-groups").get() = "gmicro",
 ):
     matrix, popt = estimate_correction_matrix.submit(
         shading_reference=shading_reference).result()
@@ -150,8 +144,6 @@ def eicm_gaussian_fit(
     write_gaussian_fit_info_md.submit(matrix=matrix,
                                       name=get_run_context().flow.name,
                                       shading_reference=shading_reference,
-                                      microscope=microscope,
-                                      group=group,
                                       amplitude=popt[0],
                                       background=popt[1],
                                       mu_x=popt[2],

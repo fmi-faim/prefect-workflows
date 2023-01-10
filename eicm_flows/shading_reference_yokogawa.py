@@ -150,7 +150,7 @@ def create_shading_reference_yokogawa(input_dir: str =
         z_plane=z_plane,
         output_dir=output_dir)
 
-    write_info_md.submit(references, "Create Shading Reference [Yokogawa]", flow_repo, input_dir, z_plane,
+    write_info_md.submit(references, get_run_context().flow_run.name, flow_repo, input_dir, z_plane,
                       microscope, output_dir)
 
     return references

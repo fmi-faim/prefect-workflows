@@ -2,7 +2,7 @@ import os
 from datetime import datetime
 from glob import glob
 from os.path import basename, join, splitext
-from typing import Literal, Tuple
+from typing import Literal, Tuple, Dict
 
 import numpy as np
 from cpr.Serializer import cpr_serializer
@@ -11,8 +11,12 @@ from cpr.utilities.utilities import task_input_hash
 from eicm.preprocessing.yokogawa import get_metadata, create_table, \
     build_field_stacks_for_channels, subtract_dark_images, \
     compute_median_projection, get_output_name
-from prefect import flow, task, unmapped
-from prefect.context import FlowRunContext, get_run_context
+from faim_prefect.block.choices import Choices
+from faim_prefect.prefect import get_prefect_context
+from prefect import flow, task
+from prefect.blocks.system import String
+from prefect.context import get_run_context
+from prefect.filesystems import LocalFileSystem
 from prefect.software.pip import pkg_resources
 from prefect_dask import DaskTaskRunner
 
@@ -63,19 +67,17 @@ def create_shading_reference(input_dir: str, z_plane: int, output_dir: str):
 @task(cache_key_fn=task_input_hash)
 def write_info_md(references: Tuple[ImageTarget],
                   name: str,
-                  id: str,
-                  flow_repo: str,
                   input_dir: str, z_plane: int, microscope: str,
-                  output_dir: str):
+                  output_dir: str, context: Dict):
     date = datetime.now().strftime("%Y/%m/%d, %H:%M:%S")
     eicm_version = pkg_resources.get_distribution("eicm").version
+    flow_repo = "https://github.com/fmi-faim/prefect-workflows/blob/main/eicm_flows"
 
     for reference in references:
         file_name = basename(reference.get_path())
         save_path = splitext(reference.get_path())[0] + ".md"
 
         text = f"# {name}\n" \
-               f"Prefect Flow-Run ID: {id}\n" \
                f"Source: [{flow_repo}]({flow_repo})\n" \
                f"Date: {date}\n" \
                f"\n" \
@@ -96,10 +98,16 @@ def write_info_md(references: Tuple[ImageTarget],
                f"\n" \
                f"## Packages\n" \
                f"* [https://github.com/fmi-faim/eicm](" \
-               f"https://github.com/fmi-faim/eicm): v{eicm_version}\n"
+               f"https://github.com/fmi-faim/eicm): v{eicm_version}\n" \
+               f"\n" \
+               f"## Prefect Context\n" \
+               f"{str(context)}"
 
         with open(save_path, "w") as f:
             f.write(text)
+
+
+fmi_groups = Choices.load("fmi-groups")
 
 
 @flow(name="Create Shading Reference [Yokogawa]",
@@ -118,7 +126,7 @@ def write_info_md(references: Tuple[ImageTarget],
               "walltime": "1:00:00",
               "job_extra_directives": [
                   "--ntasks=1",
-                  "--output=/tungstenfs/scratch/gmicro_share/_prefect/slurm/gfriedri-em-alignment-flows/output/%j.out",
+                  "--output=/tungstenfs/scratch/gmicro_share/_prefect/slurm/output/%j.out",
               ],
               "worker_extra_args": [
                   "--lifetime",
@@ -127,7 +135,7 @@ def write_info_md(references: Tuple[ImageTarget],
                   "10m",
               ],
               "job_script_prologue": [
-                  "conda run -p /tungstenfs/scratch/gmicro_share/_prefect/miniconda3/envs/airtable python /tungstenfs/scratch/gmicro_share/_prefect/airtable/log-slurm-job.py --config /tungstenfs/scratch/gmicro/_prefect/airtable/slurm-job-log.ini"
+                  String.load("log-slurm-job-to-airtable-cmd")
               ],
           },
           adapt_kwargs={
@@ -139,22 +147,22 @@ def create_shading_reference_yokogawa(input_dir: str =
                                       "/tungstenfs/scratch/gmicro/reitsabi/CV7000/Flatfield_correction_tests/20221221-Field-illumination-QC_20221221_143935/Dyes_60xW_Cellvis/",
                                       microscope: Microscopes = "CV7000",
                                       z_plane: int = 33,
-                                      output_dir: str = "/tungstenfs/scratch/gmicro_hcs/gmicro/"):
-    output_dir = join(output_dir, microscope, "Maintenance",
-                         "Shading_Reference")
+                                      group: str = fmi_groups,
+                                      output_dir: str = LocalFileSystem.load(
+                                          "tungsten-gmirco-hcs")):
+    output_dir = join(output_dir, group, microscope, "Maintenance",
+                      "Shading_Reference")
 
     os.makedirs(output_dir, exist_ok=True)
-
-    flow_repo = "https://github.com/fmi-faim/prefect-workflows/blob/main/eicm_flows"
 
     references = create_shading_reference.submit(
         input_dir=input_dir,
         z_plane=z_plane,
         output_dir=output_dir)
 
+    context = get_prefect_context(get_run_context())
     write_info_md.submit(references, get_run_context().flow.name,
-                         get_run_context().flow_run.id,
-                         flow_repo, input_dir, z_plane,
-                      microscope, output_dir)
+                         input_dir, z_plane,
+                         microscope, output_dir, context)
 
     return references

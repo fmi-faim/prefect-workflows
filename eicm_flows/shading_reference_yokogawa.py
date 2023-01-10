@@ -116,7 +116,7 @@ def write_info_md(references: Tuple[ImageTarget],
       cache_result_in_memory=False,
       persist_result=True,
       result_serializer=cpr_serializer(),
-      result_storage="local-file-system/test-eicm",
+      result_storage="local-file-system/eicm",
       task_runner=DaskTaskRunner(
           cluster_class="dask_jobqueue.SLURMCluster",
           cluster_kwargs={

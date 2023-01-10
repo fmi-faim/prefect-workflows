@@ -109,7 +109,7 @@ def write_gaussian_fit_info_md(matrix: ImageTarget,
     cache_result_in_memory=False,
       persist_result=True,
       result_serializer=cpr_serializer(),
-      result_storage="local-file-system/test-eicm",
+      result_storage="local-file-system/eicm",
       task_runner=DaskTaskRunner(
           cluster_class="dask_jobqueue.SLURMCluster",
           cluster_kwargs={
@@ -158,4 +158,4 @@ def eicm_gaussian_fit(
                                       mu_y=popt[3],
                                       context=get_prefect_context(get_run_context()))
 
-
+    return matrix

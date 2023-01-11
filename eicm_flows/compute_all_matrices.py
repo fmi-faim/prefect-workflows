@@ -79,7 +79,7 @@ def eicm_all_yokogawa(
         input_dir=raw_data.input_dir,
         microscope=raw_data.microscope,
         z_plane=raw_data.z_plane,
-        group=str(raw_data.group),
+        group=raw_data.group.value,
         output_dir=raw_data.output_dir
     )
 

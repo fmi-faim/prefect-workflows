@@ -10,12 +10,13 @@ from eicm_flows.median_filter_estimation import eicm_median_filter
 from eicm_flows.shading_reference_yokogawa import Microscopes, \
     create_shading_reference_yokogawa
 
+GROUPS = Choices.load("fmi-groups").get()
 
 class RawData(BaseModel):
     input_dir: str = "/tungstenfs/scratch/gmicro/reitsabi/CV7000/Flatfield_correction_tests/20221221-Field-illumination-QC_20221221_143935/Dyes_60xW_Cellvis/"
     microscope: Microscopes = "CV7000"
     z_plane: int = 33
-    group: Choices.load("fmi-groups").get() = "gmicro"
+    group: GROUPS = GROUPS.gmicro
     output_dir: str = LocalFileSystem.load(
         "tungsten-gmicro-hcs").basepath
 

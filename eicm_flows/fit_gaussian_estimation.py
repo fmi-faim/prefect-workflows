@@ -1,156 +1,149 @@
-import argparse
+import json
 from datetime import datetime
-from os.path import splitext, join, exists, dirname, basename
+from os.path import splitext, join, basename, dirname
+from typing import Dict
 
 import numpy as np
 import pkg_resources
-import prefect
+from cpr.Serializer import cpr_serializer
+from cpr.image.ImageTarget import ImageTarget
+from cpr.utilities.utilities import task_input_hash
 from eicm.estimator.gaussian2D_fit import get_coords, fit_gaussian_2d, \
     compute_fitted_matrix
 from eicm.estimator.utils import normalize_matrix
-from futils.io import create_output_dir
-from prefect import task, Flow
-from prefect.core import Parameter
-from prefect.run_configs import LocalRun
-from prefect.storage import GitHub
-from prefect.tasks.secrets import PrefectSecret
-from tifffile import imread, imwrite
+from faim_prefect.prefect import get_prefect_context
+from prefect import task, flow
+from prefect.context import get_run_context
+from prefect_dask import DaskTaskRunner
+from tifffile import TiffFile
 
 
-@task(nout=3)
-def load_img_task(path: str):
-    return np.squeeze(imread(path)), dirname(path), basename(path)
+def load_tiff(path: str):
+    with TiffFile(path) as tiff:
+        resolution = tiff.pages[0].resolution
+        metadata = json.loads(tiff.pages[0].description)
+        data = tiff.asarray()
+    return resolution, metadata, data
 
 
-@task()
-def normalize_task(matrix):
-    return normalize_matrix(matrix=matrix)
+@task(cache_key_fn=task_input_hash)
+def estimate_correction_matrix(shading_reference: str):
+    n, ext = splitext(basename(shading_reference))
+    save_path = join(dirname(shading_reference), f"{n}_gaussian-fit{ext}")
+
+    resolution, metadata, data = load_tiff(path=shading_reference)
+
+    matrix = ImageTarget.from_path(save_path,
+                                   metadata=metadata,
+                                   resolution=resolution)
+
+    coords = get_coords(data)
+    popt, pcov = fit_gaussian_2d(data, coords)
+
+    matrix.set_data(normalize_matrix(compute_fitted_matrix(coords=coords,
+                                                           ellipsoid_parameters=popt,
+                                                           shape=data.shape)).astype(np.float32))
 
 
-@task()
-def save_matrix_task(matrix, save_dir, name, suffix):
-    n, ext = splitext(name)
-
-    save_path = join(save_dir, n + "_" + suffix + ext)
-    imwrite(save_path, matrix.astype(np.float32), compression="zlib",
-            resolutionunit="None")
+    return matrix, popt.tolist()
 
 
-@task()
-def get_coords_task(img):
-    return get_coords(img)
-
-
-@task(nout=2)
-def fit_gaussian_2d_task(img, coords):
-    return fit_gaussian_2d(data=img,
-                           coords=coords)
-
-
-@task()
-def compute_fitted_matrix_task(coords, ellipsoid_parameters, mip):
-    return compute_fitted_matrix(coords=coords,
-                                 ellipsoid_parameters=ellipsoid_parameters,
-                                 shape=mip.shape)
-
-
-@task()
-def info_txt(save_dir, name, mip_path, amplitude,
-             offset,
-             mu_x,
-             mu_y,
-             suffix):
-    n, ext = splitext(name)
-    tmp = join(save_dir, n + "_" + suffix)
-    save_path = tmp
-    c = 1
-    while exists(save_path + ".md"):
-        save_path = tmp + "_" + str(c)
-        c += 1
-
-    save_path = save_path + ".md"
-
+@task(cache_key_fn=task_input_hash)
+def write_gaussian_fit_info_md(matrix: ImageTarget,
+                               name: str,
+                               shading_reference: str,
+                               amplitude: float,
+                               background: float,
+                               mu_x: float,
+                               mu_y: float,
+                               context: Dict):
+    date = datetime.now().strftime("%Y/%m/%d, %H:%M:%S")
     eicm_version = pkg_resources.get_distribution("eicm").version
-    now = datetime.now().strftime("%Y/%m/%d, %H:%M:%S")
+    flow_repo = "https://github.com/fmi-faim/prefect-workflows/blob/main/eicm_flows"
 
-    info = "# Estimate Illumination Correction Matrix (EICM) with Gaussian Fit\n" \
-           f"Date: {now}\n\n" \
-           "`EICM with Gaussian Fit` is a service provided by the Facility " \
-           "for Advanced Imaging and Microscopy (FAIM) at FMI for " \
-           "biomedical research. Consult with FAIM on appropriate usage. " \
-           "\n\n" \
-           "## Parameters:\n" \
-           f"* `mip_path`: {mip_path}\n" \
-           "\n" \
-           "## Fitted Gaussian:\n" \
+    file_name = basename(matrix.get_path())
+    save_path = splitext(matrix.get_path())[0] + ".md"
+
+    text = f"# {name}\n" \
+           f"Source: [{flow_repo}]({flow_repo})\n" \
+           f"Date: {date}\n" \
+           f"\n" \
+           f"`{name}` is a service provided by the Facility for Advanced " \
+           f"Imaging and Microscopy (FAIM) at FMI for biomedical research. " \
+           f"Consult with FAIM on appropriate usage.\n" \
+           f"\n" \
+           f"## Summary\n" \
+           f"The computed illumination matrix ({file_name}) is the best " \
+           f"fit of a 2D Gaussian to the provided shading reference.\n" \
+           f"\n" \
+           f"### Fitted Gaussian\n" \
            f"* Amplitude: {amplitude}\n" \
-           f"* Offset: {offset}\n" \
+           f"* Background: {background}\n" \
            f"* Centroid (X, Y): ({mu_x}, {mu_y})\n" \
-           "\n" \
-           "## Packages:\n" \
-           "* [https://github.com/fmi-faim/eicm](" \
+           f"\n" \
+           f"## Parameters\n" \
+           f"* `shading_reference`: {shading_reference}\n" \
+           f"\n" \
+           f"## Packages\n" \
+           f"* [https://github.com/fmi-faim/eicm](" \
            f"https://github.com/fmi-faim/eicm): v{eicm_version}\n" \
-           "\n"
+           f"\n" \
+           f"## Prefect Context\n" \
+           f"{str(context)}"
 
     with open(save_path, "w") as f:
-        f.write(info)
+        f.write(text)
 
 
-with Flow(name="EICM with Gaussian Fit",
-          run_config=LocalRun(labels=["CPU"])) as flow:
-    mip_path = Parameter("mip_path", default="/path/to/mip")
-    group = Parameter("group", default="gmicro")
-    user = Parameter("user", default="buchtimo")
-    output_root_dir = PrefectSecret("output-root-dir")
 
-    logger = prefect.context.get("logger")
-
-    mip, parent_dir, name = load_img_task(path=mip_path)
-
-    coords = get_coords_task(mip)
-
-    popt, pcov = fit_gaussian_2d_task(img=mip,
-                                      coords=coords)
-    logger.info(f"Found fit with popt = {popt} and corresponding pcov "
-                f"= {pcov}.")
-
-    matrix = compute_fitted_matrix_task(coords=coords,
-                                        ellipsoid_parameters=popt,
-                                        mip=mip)
-
-    matrix = normalize_task(matrix=matrix)
-
-    output_dir = create_output_dir(root_dir=output_root_dir,
-                                   group=group,
-                                   user=user,
-                                   flow_name="eicm-gaussian-fit")
-
-    save_matrix_task(matrix=matrix,
-                     save_dir=output_dir,
-                     name=name,
-                     suffix="eicm-fit-gaussian")
-
-    info_txt(save_dir=output_dir,
-             name=name,
-             mip_path=mip_path,
-             amplitude=popt[0],
-             offset=popt[1],
-             mu_x=popt[2],
-             mu_y=popt[3],
-             suffix="eicm-fit-gaussian")
-
-flow.storage = GitHub(
-    repo="fmi-faim/prefect-workflows",
-    path="eicm_flows/fit_gaussian_estimation.py",
-    ref="eicm-v0.1.1",
-    access_token_secret="github-access-token_buchtimo"
+@flow(
+    name="EICM with Gaussian Fit",
+    cache_result_in_memory=False,
+      persist_result=True,
+      result_serializer=cpr_serializer(),
+      result_storage="local-file-system/eicm",
+      task_runner=DaskTaskRunner(
+          cluster_class="dask_jobqueue.SLURMCluster",
+          cluster_kwargs={
+              "account": "dlthings",
+              "queue": "cpu_long",
+              "cores": 4,
+              "processes": 1,
+              "memory": "4 GB",
+              "walltime": "1:00:00",
+              "job_extra_directives": [
+                  "--ntasks=1",
+                  "--output=/tungstenfs/scratch/gmicro_share/_prefect/slurm/output/%j.out",
+              ],
+              "worker_extra_args": [
+                  "--lifetime",
+                  "60m",
+                  "--lifetime-stagger",
+                  "10m",
+              ],
+              "job_script_prologue": [
+                "conda run -p /tungstenfs/scratch/gmicro_share/_prefect/miniconda3/envs/airtable python /tungstenfs/scratch/gmicro_share/_prefect/airtable/log-slurm-job.py --config /tungstenfs/scratch/gmicro/_prefect/airtable/slurm-job-log.ini"
+              ],
+          },
+          adapt_kwargs={
+              "minimum": 1,
+              "maximum": 2,
+          },
+      )
 )
+def eicm_gaussian_fit(
+        shading_reference: str = "/path/to/shading_reference",
+):
+    matrix, popt = estimate_correction_matrix.submit(
+        shading_reference=shading_reference).result()
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--mip_path", type=str)
-    parser.add_argument("--group", type=str)
-    parser.add_argument("--user", type=str)
+    write_gaussian_fit_info_md.submit(matrix=matrix,
+                                      name=get_run_context().flow.name,
+                                      shading_reference=shading_reference,
+                                      amplitude=popt[0],
+                                      background=popt[1],
+                                      mu_x=popt[2],
+                                      mu_y=popt[3],
+                                      context=get_prefect_context(get_run_context()))
 
-    args = parser.parse_args()
-    flow.run(mip_path=args.mip_path)
+    return matrix

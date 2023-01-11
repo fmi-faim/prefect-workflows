@@ -1,142 +1,137 @@
-import argparse
 from datetime import datetime
-from os.path import splitext, join, exists, dirname, basename
+from os.path import splitext, join, dirname, basename
+from typing import Dict
 
 import numpy as np
 import pkg_resources
-import prefect
+from cpr.Serializer import cpr_serializer
+from cpr.image.ImageTarget import ImageTarget
+from cpr.utilities.utilities import task_input_hash
 from eicm.estimator.polynomial_fit import polynomial_fit
 from eicm.estimator.utils import normalize_matrix
-from futils.io import create_output_dir
-from prefect import task, Flow
-from prefect.core import Parameter
-from prefect.run_configs import LocalRun
-from prefect.storage import GitHub
-from prefect.tasks.secrets import PrefectSecret
-from tifffile import imwrite, imread
+from faim_prefect.prefect import get_prefect_context
+from prefect import task, flow
+from prefect.context import get_run_context
+from prefect_dask import DaskTaskRunner
+
+from eicm_flows.fit_gaussian_estimation import load_tiff
 
 
-@task(nout=3)
-def load_img_task(path: str):
-    return np.squeeze(imread(path)), dirname(path), basename(path)
+@task(cache_key_fn=task_input_hash)
+def fit_polynomial(shading_reference: str, polynomial_degree: int, order: int):
+    n, ext = splitext(basename(shading_reference))
+    save_path = join(dirname(shading_reference), f"{n}_poly-fit{ext}")
+
+    resolution, metadata, data = load_tiff(path=shading_reference)
+
+    matrix = ImageTarget.from_path(save_path,
+                                   metadata=metadata,
+                                   resolution=resolution)
+
+    fit, poly_str = polynomial_fit(mip=data,
+                                   polynomial_degree=polynomial_degree,
+                                   order=order)
+
+    matrix.set_data(normalize_matrix(fit).astype(np.float32))
+
+    return matrix, poly_str
 
 
-@task()
-def normalize_task(matrix):
-    return normalize_matrix(matrix=matrix)
-
-
-@task()
-def save_matrix_task(matrix, save_dir, name, suffix):
-    n, ext = splitext(name)
-
-    save_path = join(save_dir, n + "_" + suffix + ext)
-    imwrite(save_path, matrix.astype(np.float32), compression="zlib",
-            resolutionunit="None")
-
-
-@task(nout=2)
-def fit_polynomial(mip, polynomial_degree, order):
-    return polynomial_fit(mip=mip, polynomial_degree=polynomial_degree,
-                          order=order)
-
-
-@task()
-def info_txt(save_dir, name, mip_path, polynomial_degree, order,
-             poly_str, suffix):
-    n, ext = splitext(name)
-    tmp = join(save_dir, n + "_" + suffix)
-    save_path = tmp
-    c = 1
-    while exists(save_path + ".md"):
-        save_path = tmp + "_" + str(c)
-        c += 1
-
-    save_path = save_path + ".md"
-
+@task(cache_key_fn=task_input_hash)
+def write_poly_fit_info_md(matrix: ImageTarget,
+                           name: str,
+                           shading_reference: str,
+                           polynomial_degree: int,
+                           order: int,
+                           poly_str: str,
+                           context: Dict):
+    date = datetime.now().strftime("%Y/%m/%d, %H:%M:%S")
     eicm_version = pkg_resources.get_distribution("eicm").version
-    now = datetime.now().strftime("%Y/%m/%d, %H:%M:%S")
+    flow_repo = "https://github.com/fmi-faim/prefect-workflows/blob/main/eicm_flows"
 
-    info = "# Estimate Illumination Correction Matrix (EICM) with Polynomial Fit\n" \
-           f"Date: {now}\n\n" \
-           "`EICM with Polynomial Fit` is a service provided by the Facility " \
-           "for Advanced Imaging and Microscopy (FAIM) at FMI for " \
-           "biomedical research. Consult with FAIM on appropriate usage. " \
-           "\n\n" \
-           "## Parameters:\n" \
-           f"* `mip_path`: {mip_path}\n" \
+    file_name = basename(matrix.get_path())
+    save_path = splitext(matrix.get_path())[0] + ".md"
+
+    text = f"# {name}\n" \
+           f"Source: [{flow_repo}]({flow_repo})\n" \
+           f"Date: {date}\n" \
+           f"\n" \
+           f"`{name}` is a service provided by the Facility for Advanced " \
+           f"Imaging and Microscopy (FAIM) at FMI for biomedical research. " \
+           f"Consult with FAIM on appropriate usage.\n" \
+           f"\n" \
+           f"## Summary\n" \
+           f"The computed illumination matrix ({file_name}) is the best " \
+           f"polynomial fit to the provided shading reference.\n" \
+           f"\n" \
+           f"## Parameters\n" \
+           f"* `shading_reference`: {shading_reference}\n" \
            f"* `polynomial_degree`: {polynomial_degree}\n" \
            f"* `order`: {order}\n" \
-           "\n" \
-           "## Polynomial:\n" \
-           f"f(X, Y) = {poly_str}\n" \
-           "\n" \
-           "## Packages:\n" \
-           "* [https://github.com/fmi-faim/eicm](" \
+           f"\n" \
+           f"## Packages\n" \
+           f"* [https://github.com/fmi-faim/eicm](" \
            f"https://github.com/fmi-faim/eicm): v{eicm_version}\n" \
-           "\n"
+           f"\n" \
+           f"## Prefect Context\n" \
+           f"{str(context)}"
 
     with open(save_path, "w") as f:
-        f.write(info)
+        f.write(text)
 
 
-with Flow(name="EICM with Polynomial Fit",
-          run_config=LocalRun(labels=["CPU"])) as flow:
-    mip_path = Parameter("mip_path", default="/path/to/mip")
-    polynomial_degree = Parameter("polynomial_degree", default=4)
-    order = Parameter("order", default=4)
-    group = Parameter("group", default="gmicro")
-    user = Parameter("user", default="buchtimo")
-    output_root_dir = PrefectSecret("output-root-dir")
-
-    logger = prefect.context.get("logger")
-
-    mip, parent_dir, name = load_img_task(path=mip_path)
-
-    matrix, poly_str = fit_polynomial(mip=mip,
-                                      polynomial_degree=polynomial_degree,
-                                      order=order)
-
-    matrix = normalize_task(matrix=matrix)
-
-    output_dir = create_output_dir(root_dir=output_root_dir,
-                                   group=group,
-                                   user=user,
-                                   flow_name="eicm-polynomial-fit")
-
-    save_matrix_task(matrix=matrix,
-                     save_dir=output_dir,
-                     name=name,
-                     suffix="eicm-fit-polynomial")
-
-    info_txt(save_dir=output_dir,
-             name=name,
-             mip_path=mip_path,
-             polynomial_degree=polynomial_degree,
-             order=order,
-             poly_str=poly_str,
-             suffix="eicm-fit-polynomial")
-
-flow.storage = GitHub(
-    repo="fmi-faim/prefect-workflows",
-    path="eicm_flows/fit_polynomial_estimation.py",
-    ref="eicm-v0.1.1",
-    access_token_secret="github-access-token_buchtimo"
+@flow(
+    name="EICM with Polynomial Fit",
+    cache_result_in_memory=False,
+    persist_result=True,
+    result_serializer=cpr_serializer(),
+    result_storage="local-file-system/eicm",
+    task_runner=DaskTaskRunner(
+        cluster_class="dask_jobqueue.SLURMCluster",
+        cluster_kwargs={
+            "account": "dlthings",
+            "queue": "cpu_long",
+            "cores": 4,
+            "processes": 1,
+            "memory": "4 GB",
+            "walltime": "1:00:00",
+            "job_extra_directives": [
+                "--ntasks=1",
+                "--output=/tungstenfs/scratch/gmicro_share/_prefect/slurm/output/%j.out",
+            ],
+            "worker_extra_args": [
+                "--lifetime",
+                "60m",
+                "--lifetime-stagger",
+                "10m",
+            ],
+            "job_script_prologue": [
+                "conda run -p /tungstenfs/scratch/gmicro_share/_prefect/miniconda3/envs/airtable python /tungstenfs/scratch/gmicro_share/_prefect/airtable/log-slurm-job.py --config /tungstenfs/scratch/gmicro/_prefect/airtable/slurm-job-log.ini"
+            ],
+        },
+        adapt_kwargs={
+            "minimum": 1,
+            "maximum": 2,
+        },
+    )
 )
+def eicm_polynomial_fit(
+        shading_reference: str = "/path/to/shading_reference",
+        polynomial_degree: int = 4,
+        order: int = 4,
+):
+    matrix, poly_str = fit_polynomial.submit(
+        shading_reference=shading_reference,
+        polynomial_degree=polynomial_degree,
+        order=order).result()
 
-if __name__ == "__main__":
-    def none_or_int(value):
-        if value == 'None':
-            return None
-        return value
+    write_poly_fit_info_md.submit(matrix=matrix,
+                                  name=get_run_context().flow.name,
+                                  shading_reference=shading_reference,
+                                  polynomial_degree=polynomial_degree,
+                                  order=order,
+                                  poly_str=poly_str,
+                                  context=get_prefect_context(
+                                      get_run_context()))
 
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--mip_path", type=str)
-    parser.add_argument("--polynomial_degree", type=int)
-    parser.add_argument("--order", type=none_or_int)
-    parser.add_argument("--group", type=str)
-    parser.add_argument("--user", type=str)
-
-    args = parser.parse_args()
-    flow.run(mip_path=args.mip_path)
+    return matrix

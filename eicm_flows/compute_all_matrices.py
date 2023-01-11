@@ -75,8 +75,6 @@ def eicm_all_yokogawa(
         gaussian_fit: GaussianFit = GaussianFit(),
         polynomial_fit: PolynomialFit = PolynomialFit()
 ):
-    get_run_logger().info(raw_data.group)
-    get_run_logger().info(type(raw_data.group))
     references = create_shading_reference_yokogawa(
         input_dir=raw_data.input_dir,
         microscope=raw_data.microscope,

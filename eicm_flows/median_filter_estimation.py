@@ -1,5 +1,5 @@
 from datetime import datetime
-from os.path import splitext, join, dirname, basename
+from os.path import splitext, join, basename, dirname
 from typing import Dict
 
 import numpy as np
@@ -7,20 +7,20 @@ import pkg_resources
 from cpr.Serializer import cpr_serializer
 from cpr.image.ImageTarget import ImageTarget
 from cpr.utilities.utilities import task_input_hash
-from eicm.estimator.polynomial_fit import polynomial_fit
 from eicm.estimator.utils import normalize_matrix
 from faim_prefect.prefect import get_prefect_context
 from prefect import task, flow
 from prefect.context import get_run_context
 from prefect_dask import DaskTaskRunner
+from scipy.ndimage import median_filter
 
 from eicm_flows.fit_gaussian_estimation import load_tiff
 
 
 @task(cache_key_fn=task_input_hash)
-def fit_polynomial(shading_reference: str, polynomial_degree: int, order: int):
+def median_filter_task(shading_reference: str, filter_size: int = 3):
     n, ext = splitext(basename(shading_reference))
-    save_path = join(dirname(shading_reference), f"{n}_poly-fit{ext}")
+    save_path = join(dirname(shading_reference), f"{n}_median-filtered{ext}")
 
     resolution, metadata, data = load_tiff(path=shading_reference)
 
@@ -28,23 +28,19 @@ def fit_polynomial(shading_reference: str, polynomial_degree: int, order: int):
                                    metadata=metadata,
                                    resolution=resolution)
 
-    fit, poly_str = polynomial_fit(mip=data,
-                                   polynomial_degree=polynomial_degree,
-                                   order=order)
+    matrix.set_data(normalize_matrix(median_filter(data,
+                                                   size=filter_size)).astype(
+        np.float32))
 
-    matrix.set_data(normalize_matrix(fit).astype(np.float32))
-
-    return matrix, poly_str
+    return matrix
 
 
 @task(cache_key_fn=task_input_hash)
-def write_poly_fit_info_md(matrix: ImageTarget,
-                           name: str,
-                           shading_reference: str,
-                           polynomial_degree: int,
-                           order: int,
-                           poly_str: str,
-                           context: Dict):
+def write_median_filter_info_md(matrix: ImageTarget,
+                                name: str,
+                                shading_reference: str,
+                                filter_size: int,
+                                context: Dict):
     date = datetime.now().strftime("%Y/%m/%d, %H:%M:%S")
     eicm_version = pkg_resources.get_distribution("eicm").version
     flow_repo = "https://github.com/fmi-faim/prefect-workflows/blob/main/eicm_flows"
@@ -61,13 +57,12 @@ def write_poly_fit_info_md(matrix: ImageTarget,
            f"Consult with FAIM on appropriate usage.\n" \
            f"\n" \
            f"## Summary\n" \
-           f"The computed illumination matrix ({file_name}) is the best " \
-           f"polynomial fit to the provided shading reference.\n" \
+           f"The computed illumination matrix ({file_name}) is the " \
+           f"normalized (to max) median filtered shading reference.\n" \
            f"\n" \
            f"## Parameters\n" \
            f"* `shading_reference`: {shading_reference}\n" \
-           f"* `polynomial_degree`: {polynomial_degree}\n" \
-           f"* `order`: {order}\n" \
+           f"* `filter_size`: {filter_size}\n" \
            f"\n" \
            f"## Packages\n" \
            f"* [https://github.com/fmi-faim/eicm](" \
@@ -81,7 +76,7 @@ def write_poly_fit_info_md(matrix: ImageTarget,
 
 
 @flow(
-    name="EICM with Polynomial Fit",
+    name="EICM with Median Filter",
     cache_result_in_memory=False,
     persist_result=True,
     result_serializer=cpr_serializer(),
@@ -91,7 +86,7 @@ def write_poly_fit_info_md(matrix: ImageTarget,
         cluster_kwargs={
             "account": "dlthings",
             "queue": "cpu_long",
-            "cores": 4,
+            "cores": 1,
             "processes": 1,
             "memory": "4 GB",
             "walltime": "1:00:00",
@@ -115,23 +110,17 @@ def write_poly_fit_info_md(matrix: ImageTarget,
         },
     )
 )
-def eicm_polynomial_fit(
+def eicm_median_filter(
         shading_reference: str = "/path/to/shading_reference",
-        polynomial_degree: int = 4,
-        order: int = 4,
+        filter_size: int = 3,
 ):
-    matrix, poly_str = fit_polynomial.submit(
-        shading_reference=shading_reference,
-        polynomial_degree=polynomial_degree,
-        order=order).result()
+    matrix = median_filter_task.submit(shading_reference=shading_reference,
+                                       filter_size=filter_size).result()
 
-    write_poly_fit_info_md.submit(matrix=matrix,
-                                  name=get_run_context().flow.name,
-                                  shading_reference=shading_reference,
-                                  polynomial_degree=polynomial_degree,
-                                  order=order,
-                                  poly_str=poly_str,
-                                  context=get_prefect_context(
-                                      get_run_context()))
-
-    return matrix
+    write_median_filter_info_md.submit(matrix=matrix,
+                                       name=get_run_context().flow.name,
+                                       shading_reference=shading_reference,
+                                       filter_size=filter_size,
+                                       context=get_prefect_context(
+                                           get_run_context())
+                                       )

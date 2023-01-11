@@ -1,5 +1,6 @@
-prefect==1.4
-eicm @ git+https://github.com/fmi-faim/eicm@v0.1.1
-futils @ git+https://github.com/fmi-faim/flow-utils@v0.1.0
+prefect >= 2.7
+eicm @ git+https://github.com/fmi-faim/eicm@v0.1.2
 tifffile
 imagecodecs
+faim_prefect @ git+https://github.com/fmi-faim/faim-prefect@v0.2.0
+cpr @ git+https://github.com/fmi-faim/custom-prefect-result@v0.1.1

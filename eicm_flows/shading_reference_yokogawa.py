@@ -111,6 +111,7 @@ def write_info_md(references: Tuple[ImageTarget],
         with open(save_path, "w") as f:
             f.write(text)
 
+GROUPS = Choices.load("fmi-groups").get()
 
 @flow(name="Create Shading Reference [Yokogawa]",
       cache_result_in_memory=False,
@@ -149,7 +150,7 @@ def create_shading_reference_yokogawa(input_dir: str =
                                       "/tungstenfs/scratch/gmicro/reitsabi/CV7000/Flatfield_correction_tests/20221221-Field-illumination-QC_20221221_143935/Dyes_60xW_Cellvis/",
                                       microscope: Microscopes = "CV7000",
                                       z_plane: int = 33,
-                                      group: Choices.load("fmi-groups").get() = "gmicro",
+                                      group: GROUPS = GROUPS.gmicro,
                                       output_dir: str = LocalFileSystem.load(
                                           "tungsten-gmicro-hcs").basepath):
     output_dir_ = join(output_dir, group.value, microscope, "Maintenance",

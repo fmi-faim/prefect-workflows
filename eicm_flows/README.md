@@ -6,26 +6,41 @@ with
 # Installation
 We recommend installing the requirements into a fresh conda environment.
 ```shell
-conda create -n eicm python=3.8 
+conda create -n eicm python=3.9
 conda activate eicm
 pip install -r requirements.txt
 ```
 
-# EICM with Gaussian Blur
-Simply applies a Gaussian blur and saves the result as illumination matrix.
+# Create Shading Reference \[Yokogawa\]
+Creates a single 2D shading reference from a Yokogawa experiment. 
+The raw data are multiple Z-Stacks at different positions. 
+From these Z-Stacks the indicated z-plane is extracted. 
+From the extracted z-planes the corresponding dark-image (background) is subtracted. 
+Then the median projection is computed over all extracted and dark-image subtracted z-planes.
+The result is saved as shading reference.
+
+# EICM with Median Filter
+Simply applies a median filter, normalizes to the maximum and saves the result as illumination matrix.
 
 ## Parameters
-* `mip_path`: Path to a maximum intensity projection of a reference sample 
-  illumination image. Image has to be 2D.
-* `sigma`: Sigma of the Gaussian used to blur the mip.
+* `shading_reference`: 2D shading reference
+* `filter_size`: Size of the median filter 
 
 # EICM with Gaussian Fit
-Fits a 2D arbitrarily rotated Gaussian to the provided reference sample 
-illumination image and saves the estimated illumination matrix.
+Fits a 2D arbitrarily rotated Gaussian to the provided shading references, normalizes to the maximum and saves the estimated illumination matrix.
 
 ## Parameters
-* `mip_path`: Path to a maximum intensity projection of a reference sample 
-  illumination image. Image has to be 2D.
+* `shading_reference`: 2D shading reference
+
+# EICM with Polynomial Fit
+Fits a 2D polynomial to the provided shading references, normalizes to the maximum and saves the estimated illumination matrix.
+
+## Parameters
+* `shading_reference`: 2D shading reference
+* `polynomial_degree`
+* `order`
+
+
   
 # Outputs
 Both methods save the estimated illumination correction matrix with the 

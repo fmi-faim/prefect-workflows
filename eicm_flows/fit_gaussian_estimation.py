@@ -12,7 +12,7 @@ from eicm.estimator.gaussian2D_fit import get_coords, fit_gaussian_2d, \
     compute_fitted_matrix
 from eicm.estimator.utils import normalize_matrix
 from faim_prefect.prefect import get_prefect_context
-from prefect import task, flow
+from prefect import task, flow, get_run_logger
 from prefect.context import get_run_context
 from prefect_dask import DaskTaskRunner
 from tifffile import TiffFile
@@ -20,8 +20,18 @@ from tifffile import TiffFile
 
 def load_tiff(path: str):
     with TiffFile(path) as tiff:
-        resolution = tiff.pages[0].resolution
-        metadata = json.loads(tiff.pages[0].description)
+        try:
+            resolution = tiff.pages[0].resolution
+        except Exception as e:
+            get_run_logger().warning(f"Could not load resolution.\n{e}")
+            resolution = [1.0, 1.0]
+
+        try:
+            metadata = json.loads(tiff.pages[0].description)
+        except Exception as e:
+            get_run_logger().warning(f"Could not load metadata.\n{e}")
+            metadata = {'axes': 'YX'}
+
         data = tiff.asarray()
     return resolution, metadata, data
 

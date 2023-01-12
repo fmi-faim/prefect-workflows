@@ -91,9 +91,6 @@ def upload(path, table, uploaded_dir):
                 "cov_xx_2D",
                 "cov_xy_2D",
                 "cov_yy_2D",
-                "sde_fwhm_x",
-                "sde_fwhm_y",
-                "sde_fwhm_z",
                 "sde_peak",
                 "sde_background",
                 "sde_X",
@@ -121,6 +118,9 @@ def upload(path, table, uploaded_dir):
             else:
                 r[name] = None
 
+        add_field("sde_fwhm_x", row, float)
+        add_field("sde_fwhm_y", row, float)
+        add_field("sde_fwhm_z", row, float)
         add_field("Objective_id", row, str)
         add_field("Temperature", row, int)
         add_field("AiryUnit", row, int)

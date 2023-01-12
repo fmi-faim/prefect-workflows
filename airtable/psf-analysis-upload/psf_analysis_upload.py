@@ -3,38 +3,25 @@ import time
 from glob import glob
 from os.path import join, dirname, basename
 from shutil import move
+from typing import List, Dict
 
 import cloudinary
 import pandas as pd
-from prefect import task, Flow, Parameter, case, unmapped
-from prefect.run_configs import LocalRun
-from prefect.storage import GitHub
+from prefect import flow, task
+from prefect.task_runners import SequentialTaskRunner
 from pyairtable import Api
 
 
-@task()
 def load_airtable_config(path):
     airtable_config = configparser.ConfigParser()
     airtable_config.read(path)
     return airtable_config
 
 
-@task()
-def get_uploaded_dir(airtable_config):
-    return airtable_config['DEFAULT']['uploaded_dir']
-
-
-@task()
 def list_files(airtable_config):
     return glob(join(airtable_config['DEFAULT']['upload_dir'], '*.csv'))
 
 
-@task()
-def got_new_files(files):
-    return len(files) > 0
-
-
-@task()
 def connect_to_table(airtable_config):
     api = Api(airtable_config['DEFAULT']['api_key'])
 
@@ -42,7 +29,6 @@ def connect_to_table(airtable_config):
                          airtable_config['DEFAULT']['table_name'])
 
 
-@task()
 def connect_to_cloudinary(path):
     cloudinary_config = configparser.ConfigParser()
     cloudinary_config.read(path)
@@ -58,13 +44,8 @@ def connect_to_cloudinary(path):
     )
 
 
-@task()
-def load_measurement(path):
-    return pd.read_csv(path)
-
-
-@task()
-def upload(path, data, table, uploaded_dir):
+def upload(path, table, uploaded_dir):
+    data = pd.read_csv(path)
     for i in range(len(data)):
         img_name = join(dirname(path), basename(data.iloc[i]["PSF_path"]))
         import cloudinary.uploader
@@ -72,42 +53,67 @@ def upload(path, data, table, uploaded_dir):
 
         # Create table row. Handle empty comments.
         row = data.iloc[i][
-            ["ImageName",
-             "Date",
-             "Microscope",
-             "Magnification",
-             "NA",
-             "Amplitude",
-             "Background",
-             "X",
-             "Y",
-             "Z",
-             "FWHM_X",
-             "FWHM_Y",
-             "FWHM_Z",
-             "PrincipalAxis_1",
-             "PrincipalAxis_2",
-             "PrincipalAxis_3",
-             "SignalToBG",
-             "XYpixelsize",
-             "Zspacing",
-             "cov_xx",
-             "cov_xy",
-             "cov_xz",
-             "cov_yy",
-             "cov_yz",
-             "cov_zz",
-             "sde_peak",
-             "sde_background",
-             "sde_X",
-             "sde_Y",
-             "sde_Z",
-             "sde_cov_xx",
-             "sde_cov_xy",
-             "sde_cov_xz",
-             "sde_cov_yy",
-             "sde_cov_yz",
-             "sde_cov_zz", ]].to_dict()
+            [
+                "ImageName",
+                "Date",
+                "Microscope",
+                "Magnification",
+                "NA",
+                "Amplitude",
+                "Amplitude_2D",
+                "Background",
+                "Background_2D",
+                "X",
+                "Y",
+                "Z",
+                "X_2D",
+                "Y_2D",
+                "FWHM_X",
+                "FWHM_Y",
+                "FWHM_Z",
+                "FWHM_X_2D",
+                "FWHM_Y_2D",
+                "PrincipalAxis_1",
+                "PrincipalAxis_2",
+                "PrincipalAxis_3",
+                "PrincipalAxis_1_2D",
+                "PrincipalAxis_2_2D",
+                "SignalToBG",
+                "SignalToBG_2D",
+                "XYpixelsize",
+                "Zspacing",
+                "cov_xx",
+                "cov_xy",
+                "cov_xz",
+                "cov_yy",
+                "cov_yz",
+                "cov_zz",
+                "cov_xx_2D",
+                "cov_xy_2D",
+                "cov_yy_2D",
+                "sde_fwhm_x",
+                "sde_fwhm_y",
+                "sde_fwhm_z",
+                "sde_peak",
+                "sde_background",
+                "sde_X",
+                "sde_Y",
+                "sde_Z",
+                "sde_cov_xx",
+                "sde_cov_xy",
+                "sde_cov_xz",
+                "sde_cov_yy",
+                "sde_cov_yz",
+                "sde_cov_zz",
+                "sde_peak_2D",
+                "sde_background_2D",
+                "sde_X_2D",
+                "sde_Y_2D",
+                "sde_cov_xx_2D",
+                "sde_cov_xy_2D",
+                "sde_cov_yy_2D",
+                "version",
+            ]].to_dict()
 
         def add_field(name, r, cast):
             if name in data.columns:
@@ -126,6 +132,7 @@ def upload(path, data, table, uploaded_dir):
         add_field("Excitation", row, int)
         add_field("Emission", row, int)
         add_field("Comment", row, str)
+        add_field("End date", row, str)
 
         row['Magnification'] = str(row['Magnification'])
         if row["Objective_id"] is not None:
@@ -154,39 +161,32 @@ def upload(path, data, table, uploaded_dir):
         move(img_name, join(uploaded_dir,
                             basename(img_name)))
 
-
 @task()
-def move_uploaded(file, uploaded_dir):
-    move(file, join(uploaded_dir, basename(file)))
+def upload_and_move(files: List[str],
+                    cloudinary_config_path: str,
+                    airtable_config: Dict):
+
+    uploaded_dir = airtable_config['DEFAULT']['uploaded_dir']
+
+    connect_to_cloudinary(cloudinary_config_path)
+    table = connect_to_table(airtable_config)
+
+    for file in files:
+        upload(file, table, uploaded_dir)
+        move(file, join(uploaded_dir, basename(file)))
 
 
-with Flow("psf-analsyis-airtable-upload",
-          run_config=LocalRun(labels=["CPU"])) as flow:
-    airtable_config_path = Parameter("airtable_config_path",
-                                     default="/path/to/config")
-    cloudinary_config_path = Parameter("cloudinary_config_path",
-                                       default="/path/to/config")
-
+@flow(
+    name="PSF Analysis Airtable Upload",
+    task_runner=SequentialTaskRunner()
+)
+def psf_analysis_airtable_upload(
+        airtable_config_path: str = "/path/to/config",
+        cloudinary_config_path: str = "/path/to/config",
+):
     airtable_config = load_airtable_config(airtable_config_path)
-    uploaded_dir = get_uploaded_dir(airtable_config)
 
     files = list_files(airtable_config)
 
-    with case(got_new_files(files), True):
-        ctc = connect_to_cloudinary(cloudinary_config_path)
-
-        table = connect_to_table(airtable_config, upstream_tasks=[
-            ctc])
-
-        data_to_upload = load_measurement.map(files)
-        upload_task = upload.map(files, data_to_upload, unmapped(table),
-                                 unmapped(uploaded_dir))
-
-        move_uploaded.map(files, unmapped(uploaded_dir),
-                          upstream_tasks=[upload_task])
-
-flow.storage = GitHub(
-    repo="fmi-faim/prefect-workflows",
-    path="airtable/psf-analysis-upload/psf_analysis_upload.py",
-    ref="psf-analysis-upload-v0.1.0"
-)
+    if len(files) > 0:
+        upload_and_move.submit(files, cloudinary_config_path, airtable_config)

@@ -46,7 +46,7 @@ class PolynomialFit(BaseModel):
         cluster_kwargs={
             "account": "dlthings",
             "queue": "cpu_long",
-            "cores": 1,
+            "cores": 2,
             "processes": 1,
             "memory": "4 GB",
             "walltime": "1:00:00",
@@ -66,7 +66,7 @@ class PolynomialFit(BaseModel):
         },
         adapt_kwargs={
             "minimum": 1,
-            "maximum": 2,
+            "maximum": 3,
         },
     )
 )
@@ -76,7 +76,7 @@ def eicm_all_yokogawa(
         gaussian_fit: GaussianFit = GaussianFit(),
         polynomial_fit: PolynomialFit = PolynomialFit()
 ):
-    references = create_shading_reference_yokogawa(
+    shading_references = create_shading_reference_yokogawa(
         input_dir=raw_data.input_dir,
         microscope=raw_data.microscope,
         z_plane=raw_data.z_plane,
@@ -84,15 +84,14 @@ def eicm_all_yokogawa(
         output_dir=raw_data.output_dir
     )
 
-    for reference in references:
-        if median_filter.apply:
-            eicm_median_filter(shading_reference=reference,
-                               filter_size=median_filter.filter_size)
+    if median_filter.apply:
+        eicm_median_filter(shading_references=shading_references,
+                           filter_size=median_filter.filter_size)
 
-        if gaussian_fit.apply:
-            eicm_gaussian_fit(shading_reference=reference)
+    if gaussian_fit.apply:
+        eicm_gaussian_fit(shading_references=shading_references)
 
-        if polynomial_fit.apply:
-            eicm_polynomial_fit(shading_reference=reference,
-                                polynomial_degree=polynomial_fit.polynomial_degree,
-                                order=polynomial_fit.order)
+    if polynomial_fit.apply:
+        eicm_polynomial_fit(shading_references=shading_references,
+                            polynomial_degree=polynomial_fit.polynomial_degree,
+                            order=polynomial_fit.order)

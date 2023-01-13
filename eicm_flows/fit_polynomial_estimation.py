@@ -1,6 +1,6 @@
 from datetime import datetime
 from os.path import splitext, join, dirname, basename
-from typing import Dict
+from typing import Dict, List
 
 import numpy as np
 import pkg_resources
@@ -18,66 +18,72 @@ from eicm_flows.fit_gaussian_estimation import load_tiff
 
 
 @task(cache_key_fn=task_input_hash)
-def fit_polynomial(shading_reference: str, polynomial_degree: int, order: int):
-    n, ext = splitext(basename(shading_reference))
-    save_path = join(dirname(shading_reference), f"{n}_poly-fit{ext}")
+def fit_polynomial(shading_references: List[str], polynomial_degree: int,
+                                       order: int):
+    matrices = []
 
-    resolution, metadata, data = load_tiff(path=shading_reference)
+    for shading_reference in shading_references:
+        n, ext = splitext(basename(shading_reference))
+        save_path = join(dirname(shading_reference), f"{n}_poly-fit{ext}")
 
-    matrix = ImageTarget.from_path(save_path,
-                                   metadata=metadata,
-                                   resolution=resolution)
+        resolution, metadata, data = load_tiff(path=shading_reference)
 
-    fit, poly_str = polynomial_fit(mip=data,
-                                   polynomial_degree=polynomial_degree,
-                                   order=order)
+        matrix = ImageTarget.from_path(save_path,
+                                       metadata=metadata,
+                                       resolution=resolution)
 
-    matrix.set_data(normalize_matrix(fit).astype(np.float32))
+        fit, _ = polynomial_fit(mip=data,
+                                       polynomial_degree=polynomial_degree,
+                                       order=order)
 
-    return matrix, poly_str
+        matrix.set_data(normalize_matrix(fit).astype(np.float32))
+
+        matrices.append(matrix)
+
+    return matrices
 
 
 @task(cache_key_fn=task_input_hash)
-def write_poly_fit_info_md(matrix: ImageTarget,
+def write_poly_fit_info_md(matrices: List[ImageTarget],
                            name: str,
-                           shading_reference: str,
+                           shading_references: List[str],
                            polynomial_degree: int,
                            order: int,
-                           poly_str: str,
                            context: Dict):
     date = datetime.now().strftime("%Y/%m/%d, %H:%M:%S")
     eicm_version = pkg_resources.get_distribution("eicm").version
     flow_repo = "https://github.com/fmi-faim/prefect-workflows/blob/main/eicm_flows"
 
-    file_name = basename(matrix.get_path())
-    save_path = splitext(matrix.get_path())[0] + ".md"
+    for matrix, shading_reference in zip(matrices, shading_references):
+        file_name = basename(matrix.get_path())
+        save_path = splitext(matrix.get_path())[0] + ".md"
 
-    text = f"# {name}\n" \
-           f"Source: [{flow_repo}]({flow_repo})\n" \
-           f"Date: {date}\n" \
-           f"\n" \
-           f"`{name}` is a service provided by the Facility for Advanced " \
-           f"Imaging and Microscopy (FAIM) at FMI for biomedical research. " \
-           f"Consult with FAIM on appropriate usage.\n" \
-           f"\n" \
-           f"## Summary\n" \
-           f"The computed illumination matrix ({file_name}) is the best " \
-           f"polynomial fit to the provided shading reference.\n" \
-           f"\n" \
-           f"## Parameters\n" \
-           f"* `shading_reference`: {shading_reference}\n" \
-           f"* `polynomial_degree`: {polynomial_degree}\n" \
-           f"* `order`: {order}\n" \
-           f"\n" \
-           f"## Packages\n" \
-           f"* [https://github.com/fmi-faim/eicm](" \
-           f"https://github.com/fmi-faim/eicm): v{eicm_version}\n" \
-           f"\n" \
-           f"## Prefect Context\n" \
-           f"{str(context)}"
+        text = f"# {name}\n" \
+               f"Source: [{flow_repo}]({flow_repo})\n" \
+               f"Date: {date}\n" \
+               f"\n" \
+               f"`{name}` is a service provided by the Facility for Advanced " \
+               f"Imaging and Microscopy (FAIM) at FMI for biomedical research. " \
+               f"Consult with FAIM on appropriate usage.\n" \
+               f"\n" \
+               f"## Summary\n" \
+               f"The computed illumination matrix ({file_name}) is the best " \
+               f"polynomial fit to the provided shading reference.\n" \
+               f"\n" \
+               f"## Parameters\n" \
+               f"* `shading_reference`: {shading_reference}\n" \
+               f"* `polynomial_degree`: {polynomial_degree}\n" \
+               f"* `order`: {order}\n" \
+               f"\n" \
+               f"## Packages\n" \
+               f"* [https://github.com/fmi-faim/eicm](" \
+               f"https://github.com/fmi-faim/eicm): v{eicm_version}\n" \
+               f"\n" \
+               f"## Prefect Context\n" \
+               f"{str(context)}"
 
-    with open(save_path, "w") as f:
-        f.write(text)
+        with open(save_path, "w") as f:
+            f.write(text)
 
 
 @flow(
@@ -116,22 +122,21 @@ def write_poly_fit_info_md(matrix: ImageTarget,
     )
 )
 def eicm_polynomial_fit(
-        shading_reference: str = "/path/to/shading_reference",
+        shading_references: List[str] = ["/path/to/shading_reference"],
         polynomial_degree: int = 4,
         order: int = 4,
 ):
-    matrix, poly_str = fit_polynomial.submit(
-        shading_reference=shading_reference,
+    matrices = fit_polynomial.submit(
+        shading_references=shading_references,
         polynomial_degree=polynomial_degree,
         order=order).result()
 
-    write_poly_fit_info_md.submit(matrix=matrix,
+    write_poly_fit_info_md.submit(matrices=matrices,
                                   name=get_run_context().flow.name,
-                                  shading_reference=shading_reference,
+                                  shading_references=shading_references,
                                   polynomial_degree=polynomial_degree,
                                   order=order,
-                                  poly_str=poly_str,
                                   context=get_prefect_context(
                                       get_run_context()))
 
-    return matrix
+    return [m.get_path() for m in matrices]

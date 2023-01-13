@@ -1,6 +1,7 @@
 import json
 from datetime import datetime
 from os.path import splitext, join, basename, dirname
+from pathlib import Path
 from typing import Dict, List
 
 import numpy as np
@@ -18,7 +19,7 @@ from prefect_dask import DaskTaskRunner
 from tifffile import TiffFile
 
 
-def load_tiff(path: str):
+def load_tiff(path: Path):
     with TiffFile(path) as tiff:
         try:
             resolution = tiff.pages[0].resolution
@@ -37,80 +38,74 @@ def load_tiff(path: str):
 
 
 @task(cache_key_fn=task_input_hash)
-def estimate_correction_matrix(shading_references: List[str]):
-    matrices, popts = [], []
+def estimate_correction_matrix(shading_reference: Path):
+    n, ext = splitext(basename(shading_reference))
+    save_path = join(dirname(shading_reference), f"{n}_gaussian-fit{ext}")
 
-    for shading_reference in shading_references:
-        n, ext = splitext(basename(shading_reference))
-        save_path = join(dirname(shading_reference), f"{n}_gaussian-fit{ext}")
+    resolution, metadata, data = load_tiff(path=shading_reference)
 
-        resolution, metadata, data = load_tiff(path=shading_reference)
+    matrix = ImageTarget.from_path(save_path,
+                                   metadata=metadata,
+                                   resolution=resolution)
 
-        matrix = ImageTarget.from_path(save_path,
-                                       metadata=metadata,
-                                       resolution=resolution)
+    coords = get_coords(data)
+    popt, pcov = fit_gaussian_2d(data, coords)
 
-        coords = get_coords(data)
-        popt, pcov = fit_gaussian_2d(data, coords)
+    matrix.set_data(normalize_matrix(compute_fitted_matrix(coords=coords,
+                                                           ellipsoid_parameters=popt,
+                                                           shape=data.shape)).astype(
+        np.float32))
 
-        matrix.set_data(normalize_matrix(compute_fitted_matrix(coords=coords,
-                                                               ellipsoid_parameters=popt,
-                                                               shape=data.shape)).astype(
-            np.float32))
-
-        matrices.append(matrix), popts.append(popt.tolist())
-
-    return matrices, popts
+    return matrix, popt.tolist()
 
 
 @task(cache_key_fn=task_input_hash)
-def write_gaussian_fit_info_md(matrices: List[ImageTarget],
+def write_gaussian_fit_info_md(result,
                                name: str,
-                               shading_references: List[str],
-                               popts: List[List[float]],
+                               shading_reference: Path,
                                context: Dict):
+    matrix, popt = result
+
     date = datetime.now().strftime("%Y/%m/%d, %H:%M:%S")
     eicm_version = pkg_resources.get_distribution("eicm").version
     flow_repo = "https://github.com/fmi-faim/prefect-workflows/blob/main/eicm_flows"
 
-    for matrix, shading_reference, popt in zip(matrices, shading_references,
-                                               popts):
-        amplitude = popt[0],
-        background = popt[1],
-        mu_x = popt[2],
-        mu_y = popt[3]
-        file_name = basename(matrix.get_path())
-        save_path = splitext(matrix.get_path())[0] + ".md"
+    amplitude = popt[0],
+    background = popt[1],
+    mu_x = popt[2],
+    mu_y = popt[3]
+    file_name = basename(matrix.get_path())
+    save_path = splitext(matrix.get_path())[0] + ".md"
 
-        text = f"# {name}\n" \
-               f"Source: [{flow_repo}]({flow_repo})\n" \
-               f"Date: {date}\n" \
-               f"\n" \
-               f"`{name}` is a service provided by the Facility for Advanced " \
-               f"Imaging and Microscopy (FAIM) at FMI for biomedical research. " \
-               f"Consult with FAIM on appropriate usage.\n" \
-               f"\n" \
-               f"## Summary\n" \
-               f"The computed illumination matrix ({file_name}) is the best " \
-               f"fit of a 2D Gaussian to the provided shading reference.\n" \
-               f"\n" \
-               f"### Fitted Gaussian\n" \
-               f"* Amplitude: {amplitude}\n" \
-               f"* Background: {background}\n" \
-               f"* Centroid (X, Y): ({mu_x}, {mu_y})\n" \
-               f"\n" \
-               f"## Parameters\n" \
-               f"* `shading_reference`: {shading_reference}\n" \
-               f"\n" \
-               f"## Packages\n" \
-               f"* [https://github.com/fmi-faim/eicm](" \
-               f"https://github.com/fmi-faim/eicm): v{eicm_version}\n" \
-               f"\n" \
-               f"## Prefect Context\n" \
-               f"{str(context)}"
+    text = f"# {name}\n" \
+           f"Source: [{flow_repo}]({flow_repo})\n" \
+           f"Date: {date}\n" \
+           f"\n" \
+           f"`{name}` is a service provided by the Facility for Advanced " \
+           f"Imaging and Microscopy (FAIM) at FMI for biomedical research. " \
+           f"Consult with FAIM on appropriate usage.\n" \
+           f"\n" \
+           f"## Summary\n" \
+           f"The computed illumination matrix ({file_name}) is the best " \
+           f"fit of a 2D Gaussian to the provided shading reference.\n" \
+           f"\n" \
+           f"### Fitted Gaussian\n" \
+           f"* Amplitude: {amplitude}\n" \
+           f"* Background: {background}\n" \
+           f"* Centroid (X, Y): ({mu_x}, {mu_y})\n" \
+           f"\n" \
+           f"## Parameters\n" \
+           f"* `shading_reference`: {shading_reference}\n" \
+           f"\n" \
+           f"## Packages\n" \
+           f"* [https://github.com/fmi-faim/eicm](" \
+           f"https://github.com/fmi-faim/eicm): v{eicm_version}\n" \
+           f"\n" \
+           f"## Prefect Context\n" \
+           f"{str(context)}"
 
-        with open(save_path, "w") as f:
-            f.write(text)
+    with open(save_path, "w") as f:
+        f.write(text)
 
 
 @flow(
@@ -124,8 +119,7 @@ def write_gaussian_fit_info_md(matrices: List[ImageTarget],
         cluster_kwargs={
             "account": "dlthings",
             "queue": "cpu_long",
-            "cores": 4,
-            "processes": 1,
+            "cores": 2,
             "memory": "4 GB",
             "walltime": "1:00:00",
             "job_extra_directives": [
@@ -149,16 +143,14 @@ def write_gaussian_fit_info_md(matrices: List[ImageTarget],
     )
 )
 def eicm_gaussian_fit(
-        shading_references: List[str] = ["/path/to/shading_reference"],
+        shading_references: List[Path] = [Path("/path/to/shading_reference")],
 ):
-    matrices, popts = estimate_correction_matrix.submit(
-        shading_references=shading_references).result()
+    for shading_reference in shading_references:
+        future = estimate_correction_matrix.submit(
+            shading_reference=shading_reference)
 
-    write_gaussian_fit_info_md.submit(matrices=matrices,
-                                      name=get_run_context().flow.name,
-                                      shading_references=shading_references,
-                                      popts=popts,
-                                      context=get_prefect_context(
-                                          get_run_context()))
-
-    return [m.get_path() for m in matrices]
+        write_gaussian_fit_info_md.submit(result=future,
+                                          name=get_run_context().flow.name,
+                                          shading_reference=shading_reference,
+                                          context=get_prefect_context(
+                                              get_run_context()))

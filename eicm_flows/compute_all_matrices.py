@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from faim_prefect.block.choices import Choices
 from prefect import flow, get_run_logger
 from prefect.filesystems import LocalFileSystem
@@ -13,12 +15,12 @@ from eicm_flows.shading_reference_yokogawa import Microscopes, \
 GROUPS = Choices.load("fmi-groups").get()
 
 class RawData(BaseModel):
-    input_dir: str = "/tungstenfs/scratch/gmicro/reitsabi/CV7000/Flatfield_correction_tests/20221221-Field-illumination-QC_20221221_143935/Dyes_60xW_Cellvis/"
+    input_dir: Path = Path("/tungstenfs/scratch/gmicro/reitsabi/CV7000/Flatfield_correction_tests/20221221-Field-illumination-QC_20221221_143935/Dyes_60xW_Cellvis/")
     microscope: Microscopes = "CV7000"
     z_plane: int = 33
     group: GROUPS = GROUPS.gmicro
-    output_dir: str = LocalFileSystem.load(
-        "tungsten-gmicro-hcs").basepath
+    output_dir: Path = Path(LocalFileSystem.load(
+        "tungsten-gmicro-hcs").basepath)
 
 
 class MedianFilter(BaseModel):

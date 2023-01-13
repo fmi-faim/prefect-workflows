@@ -1,5 +1,6 @@
 from datetime import datetime
 from os.path import splitext, join, basename, dirname
+from pathlib import Path
 from typing import Dict, List
 
 import numpy as np
@@ -18,68 +19,62 @@ from eicm_flows.fit_gaussian_estimation import load_tiff
 
 
 @task(cache_key_fn=task_input_hash)
-def median_filter_task(shading_references: List[str], filter_size: int = 3):
-    matrices = []
+def median_filter_task(shading_reference: Path, filter_size: int = 3):
+    n, ext = splitext(basename(shading_reference))
+    save_path = join(dirname(shading_reference),
+                     f"{n}_median-filtered{ext}")
 
-    for shading_reference in shading_references:
-        n, ext = splitext(basename(shading_reference))
-        save_path = join(dirname(shading_reference),
-                         f"{n}_median-filtered{ext}")
+    resolution, metadata, data = load_tiff(path=shading_reference)
 
-        resolution, metadata, data = load_tiff(path=shading_reference)
+    matrix = ImageTarget.from_path(save_path,
+                                   metadata=metadata,
+                                   resolution=resolution)
 
-        matrix = ImageTarget.from_path(save_path,
-                                       metadata=metadata,
-                                       resolution=resolution)
+    matrix.set_data(normalize_matrix(median_filter(data,
+                                                   size=filter_size)).astype(
+        np.float32))
 
-        matrix.set_data(normalize_matrix(median_filter(data,
-                                                       size=filter_size)).astype(
-            np.float32))
-
-        matrices.append(matrix)
-
-    return matrices
+    return matrix
 
 
 @task(cache_key_fn=task_input_hash)
-def write_median_filter_info_md(matrices: List[ImageTarget],
+def write_median_filter_info_md(matrix: ImageTarget,
                                 name: str,
-                                shading_references: List[str],
+                                shading_reference: Path,
                                 filter_size: int,
                                 context: Dict):
     date = datetime.now().strftime("%Y/%m/%d, %H:%M:%S")
     eicm_version = pkg_resources.get_distribution("eicm").version
     flow_repo = "https://github.com/fmi-faim/prefect-workflows/blob/main/eicm_flows"
 
-    for matrix, shading_reference in zip(matrices, shading_references):
-        file_name = basename(matrix.get_path())
-        save_path = splitext(matrix.get_path())[0] + ".md"
+    file_name = basename(matrix.get_path())
+    save_path = splitext(matrix.get_path())[0] + ".md"
 
-        text = f"# {name}\n" \
-               f"Source: [{flow_repo}]({flow_repo})\n" \
-               f"Date: {date}\n" \
-               f"\n" \
-               f"`{name}` is a service provided by the Facility for Advanced " \
-               f"Imaging and Microscopy (FAIM) at FMI for biomedical research. " \
-               f"Consult with FAIM on appropriate usage.\n" \
-               f"\n" \
-               f"## Summary\n" \
-               f"The computed illumination matrix ({file_name}) is the " \
-               f"normalized (to max) median filtered shading reference.\n" \
-               f"\n" \
-               f"## Parameters\n" \
-               f"* `shading_reference`: {shading_reference}\n" \
-               f"* `filter_size`: {filter_size}\n" \
-               f"\n" \
-               f"## Packages\n" \
-               f"* [https://github.com/fmi-faim/eicm](" \
-               f"https://github.com/fmi-faim/eicm): v{eicm_version}\n" \
-               f"\n" \
-               f"## Prefect Context\n" \
-               f"{str(context)}"
+    text = f"# {name}\n" \
+           f"Source: [{flow_repo}]({flow_repo})\n" \
+           f"Date: {date}\n" \
+           f"\n" \
+           f"`{name}` is a service provided by the Facility for Advanced " \
+           f"Imaging and Microscopy (FAIM) at FMI for biomedical research. " \
+           f"Consult with FAIM on appropriate usage.\n" \
+           f"\n" \
+           f"## Summary\n" \
+           f"The computed illumination matrix ({file_name}) is the " \
+           f"normalized (to max) median filtered shading reference.\n" \
+           f"\n" \
+           f"## Parameters\n" \
+           f"* `shading_reference`: {shading_reference}\n" \
+           f"* `filter_size`: {filter_size}\n" \
+           f"\n" \
+           f"## Packages\n" \
+           f"* [https://github.com/fmi-faim/eicm](" \
+           f"https://github.com/fmi-faim/eicm): v{eicm_version}\n" \
+           f"\n" \
+           f"## Prefect Context\n" \
+           f"{str(context)}"
 
-        with open(save_path, "w") as f:
-            f.write(text)
+    with open(save_path, "w") as f:
+        f.write(text)
 
 
 @flow(
@@ -93,8 +88,7 @@ def write_median_filter_info_md(matrices: List[ImageTarget],
         cluster_kwargs={
             "account": "dlthings",
             "queue": "cpu_long",
-            "cores": 1,
-            "processes": 1,
+            "cores": 2,
             "memory": "4 GB",
             "walltime": "1:00:00",
             "job_extra_directives": [
@@ -118,18 +112,19 @@ def write_median_filter_info_md(matrices: List[ImageTarget],
     )
 )
 def eicm_median_filter(
-        shading_references: List[str] = ["/path/to/shading_reference"],
+        shading_references: List[Path] = [Path("/path/to/shading_reference")],
         filter_size: int = 3,
 ):
-    matrices = median_filter_task.submit(shading_references=shading_references,
-                                         filter_size=filter_size).result()
+    for shading_reference in shading_references:
+        matrix = median_filter_task.submit(
+            shading_reference=shading_reference,
+            filter_size=filter_size)
 
-    write_median_filter_info_md.submit(matrices=matrices,
-                                       name=get_run_context().flow.name,
-                                       shading_references=shading_references,
-                                       filter_size=filter_size,
-                                       context=get_prefect_context(
-                                           get_run_context())
-                                       )
+        write_median_filter_info_md.submit(matrix=matrix,
+                                           name=get_run_context().flow.name,
+                                           shading_reference=shading_reference,
+                                           filter_size=filter_size,
+                                           context=get_prefect_context(
+                                               get_run_context())
+                                           )
 
-    return [m.get_path() for m in matrices]

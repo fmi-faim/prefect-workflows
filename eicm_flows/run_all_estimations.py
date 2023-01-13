@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import List
 
 from prefect import flow
@@ -10,9 +11,9 @@ from eicm_flows.median_filter_estimation import eicm_median_filter
 
 
 class RawData(BaseModel):
-    shading_references: List[str] = \
+    shading_references: List[Path] = \
         [
-            "/tungstenfs/scratch/gmicro/reitsabi/CV7000/Flatfield_correction_tests/20221221-Field-illumination-QC_20221221_143935/Dyes_60xW_Cellvis/"]
+            Path("/tungstenfs/scratch/gmicro/reitsabi/CV7000/Flatfield_correction_tests/20221221-Field-illumination-QC_20221221_143935/Dyes_60xW_Cellvis/")]
 
 
 class MedianFilter(BaseModel):

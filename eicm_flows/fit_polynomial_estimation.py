@@ -1,6 +1,7 @@
 from datetime import datetime
 from os.path import splitext, join, dirname, basename
-from typing import Dict
+from pathlib import Path
+from typing import Dict, List
 
 import numpy as np
 import pkg_resources
@@ -18,7 +19,9 @@ from eicm_flows.fit_gaussian_estimation import load_tiff
 
 
 @task(cache_key_fn=task_input_hash)
-def fit_polynomial(shading_reference: str, polynomial_degree: int, order: int):
+def fit_polynomial(shading_reference: Path, polynomial_degree: int,
+                                       order: int):
+
     n, ext = splitext(basename(shading_reference))
     save_path = join(dirname(shading_reference), f"{n}_poly-fit{ext}")
 
@@ -28,22 +31,21 @@ def fit_polynomial(shading_reference: str, polynomial_degree: int, order: int):
                                    metadata=metadata,
                                    resolution=resolution)
 
-    fit, poly_str = polynomial_fit(mip=data,
+    fit, _ = polynomial_fit(mip=data,
                                    polynomial_degree=polynomial_degree,
                                    order=order)
 
     matrix.set_data(normalize_matrix(fit).astype(np.float32))
 
-    return matrix, poly_str
+    return matrix
 
 
 @task(cache_key_fn=task_input_hash)
 def write_poly_fit_info_md(matrix: ImageTarget,
                            name: str,
-                           shading_reference: str,
+                           shading_reference: Path,
                            polynomial_degree: int,
                            order: int,
-                           poly_str: str,
                            context: Dict):
     date = datetime.now().strftime("%Y/%m/%d, %H:%M:%S")
     eicm_version = pkg_resources.get_distribution("eicm").version
@@ -91,8 +93,7 @@ def write_poly_fit_info_md(matrix: ImageTarget,
         cluster_kwargs={
             "account": "dlthings",
             "queue": "cpu_long",
-            "cores": 4,
-            "processes": 1,
+            "cores": 1,
             "memory": "4 GB",
             "walltime": "1:00:00",
             "job_extra_directives": [
@@ -116,22 +117,22 @@ def write_poly_fit_info_md(matrix: ImageTarget,
     )
 )
 def eicm_polynomial_fit(
-        shading_reference: str = "/path/to/shading_reference",
+        shading_references: List[Path] = [Path("/path/to/shading_reference")],
         polynomial_degree: int = 4,
         order: int = 4,
 ):
-    matrix, poly_str = fit_polynomial.submit(
-        shading_reference=shading_reference,
-        polynomial_degree=polynomial_degree,
-        order=order).result()
+    run_context = get_run_context()
+    context = get_prefect_context(run_context)
+    flow_name = run_context.flow.name
+    for shading_reference in shading_references:
+        matrix = fit_polynomial.submit(
+            shading_reference=shading_reference,
+            polynomial_degree=polynomial_degree,
+            order=order)
 
-    write_poly_fit_info_md.submit(matrix=matrix,
-                                  name=get_run_context().flow.name,
-                                  shading_reference=shading_reference,
-                                  polynomial_degree=polynomial_degree,
-                                  order=order,
-                                  poly_str=poly_str,
-                                  context=get_prefect_context(
-                                      get_run_context()))
-
-    return matrix
+        write_poly_fit_info_md.submit(matrix=matrix,
+                                      name=flow_name,
+                                      shading_reference=shading_reference,
+                                      polynomial_degree=polynomial_degree,
+                                      order=order,
+                                      context=context)

@@ -1,7 +1,6 @@
 # Workflows to estimated illumination correction matrices
 These flows can be used to estimated illumination correction matrices (EICM) 
-with 
-[eicm](http://github.com/fmi-faim/eicm).
+with [eicm](http://github.com/fmi-faim/eicm).
 
 # Installation
 We recommend installing the requirements into a fresh conda environment.
@@ -23,26 +22,19 @@ The result is saved as shading reference.
 Simply applies a median filter, normalizes to the maximum and saves the result as illumination matrix.
 
 ## Parameters
-* `shading_reference`: 2D shading reference
+* `shading_references`: List of 2D shading references
 * `filter_size`: Size of the median filter 
 
 # EICM with Gaussian Fit
 Fits a 2D arbitrarily rotated Gaussian to the provided shading references, normalizes to the maximum and saves the estimated illumination matrix.
 
 ## Parameters
-* `shading_reference`: 2D shading reference
+* `shading_references`: List of 2D shading references
 
 # EICM with Polynomial Fit
 Fits a 2D polynomial to the provided shading references, normalizes to the maximum and saves the estimated illumination matrix.
 
 ## Parameters
-* `shading_reference`: 2D shading reference
+* `shading_references`: List of 2D shading references
 * `polynomial_degree`
 * `order`
-
-
-  
-# Outputs
-Both methods save the estimated illumination correction matrix with the 
-corresponding suffixes `eicm-blur` or `eicm-fit`. 
-Additionally, an info markdown file is generated.

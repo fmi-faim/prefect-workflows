@@ -1,26 +1,19 @@
 from pathlib import Path
+from typing import List
 
-from faim_prefect.block.choices import Choices
-from prefect import flow, get_run_logger
-from prefect.filesystems import LocalFileSystem
+from prefect import flow
 from prefect_dask import DaskTaskRunner
 from pydantic import BaseModel
 
 from eicm_flows.fit_gaussian_estimation import eicm_gaussian_fit
 from eicm_flows.fit_polynomial_estimation import eicm_polynomial_fit
 from eicm_flows.median_filter_estimation import eicm_median_filter
-from eicm_flows.shading_reference_yokogawa import Microscopes, \
-    create_shading_reference_yokogawa
 
-GROUPS = Choices.load("fmi-groups").get()
 
 class RawData(BaseModel):
-    input_dir: Path = Path("/tungstenfs/scratch/gmicro/reitsabi/CV7000/Flatfield_correction_tests/20221221-Field-illumination-QC_20221221_143935/Dyes_60xW_Cellvis/")
-    microscope: Microscopes = "CV7000"
-    z_plane: int = 33
-    group: GROUPS = GROUPS.gmicro
-    output_dir: Path = Path(LocalFileSystem.load(
-        "tungsten-gmicro-hcs").basepath)
+    shading_references: List[Path] = \
+        [
+            Path("/tungstenfs/scratch/gmicro/reitsabi/CV7000/Flatfield_correction_tests/20221221-Field-illumination-QC_20221221_143935/Dyes_60xW_Cellvis/")]
 
 
 class MedianFilter(BaseModel):
@@ -39,7 +32,7 @@ class PolynomialFit(BaseModel):
 
 
 @flow(
-    name="EICM All [Yokogawa]",
+    name="EICM All",
     cache_result_in_memory=False,
     persist_result=True,
     result_storage="local-file-system/eicm",
@@ -72,28 +65,20 @@ class PolynomialFit(BaseModel):
         },
     )
 )
-def eicm_all_yokogawa(
+def eicm_all(
         raw_data: RawData = RawData(),
         median_filter: MedianFilter = MedianFilter(),
         gaussian_fit: GaussianFit = GaussianFit(),
         polynomial_fit: PolynomialFit = PolynomialFit()
 ):
-    shading_references = create_shading_reference_yokogawa(
-        input_dir=raw_data.input_dir,
-        microscope=raw_data.microscope,
-        z_plane=raw_data.z_plane,
-        group=raw_data.group.value,
-        output_dir=raw_data.output_dir
-    )
-
     if median_filter.apply:
-        eicm_median_filter(shading_references=shading_references,
+        eicm_median_filter(shading_references=raw_data.shading_references,
                            filter_size=median_filter.filter_size)
 
     if gaussian_fit.apply:
-        eicm_gaussian_fit(shading_references=shading_references)
+        eicm_gaussian_fit(shading_references=raw_data.shading_references)
 
     if polynomial_fit.apply:
-        eicm_polynomial_fit(shading_references=shading_references,
+        eicm_polynomial_fit(shading_references=raw_data.shading_references,
                             polynomial_degree=polynomial_fit.polynomial_degree,
                             order=polynomial_fit.order)

@@ -1,6 +1,7 @@
 from datetime import datetime
 from os.path import splitext, join, basename, dirname
-from typing import Dict
+from pathlib import Path
+from typing import Dict, List
 
 import numpy as np
 import pkg_resources
@@ -18,9 +19,10 @@ from eicm_flows.fit_gaussian_estimation import load_tiff
 
 
 @task(cache_key_fn=task_input_hash)
-def median_filter_task(shading_reference: str, filter_size: int = 3):
+def median_filter_task(shading_reference: Path, filter_size: int = 3):
     n, ext = splitext(basename(shading_reference))
-    save_path = join(dirname(shading_reference), f"{n}_median-filtered{ext}")
+    save_path = join(dirname(shading_reference),
+                     f"{n}_median-filtered{ext}")
 
     resolution, metadata, data = load_tiff(path=shading_reference)
 
@@ -38,7 +40,7 @@ def median_filter_task(shading_reference: str, filter_size: int = 3):
 @task(cache_key_fn=task_input_hash)
 def write_median_filter_info_md(matrix: ImageTarget,
                                 name: str,
-                                shading_reference: str,
+                                shading_reference: Path,
                                 filter_size: int,
                                 context: Dict):
     date = datetime.now().strftime("%Y/%m/%d, %H:%M:%S")
@@ -86,8 +88,7 @@ def write_median_filter_info_md(matrix: ImageTarget,
         cluster_kwargs={
             "account": "dlthings",
             "queue": "cpu_long",
-            "cores": 1,
-            "processes": 1,
+            "cores": 2,
             "memory": "4 GB",
             "walltime": "1:00:00",
             "job_extra_directives": [
@@ -111,16 +112,19 @@ def write_median_filter_info_md(matrix: ImageTarget,
     )
 )
 def eicm_median_filter(
-        shading_reference: str = "/path/to/shading_reference",
+        shading_references: List[Path] = [Path("/path/to/shading_reference")],
         filter_size: int = 3,
 ):
-    matrix = median_filter_task.submit(shading_reference=shading_reference,
-                                       filter_size=filter_size).result()
+    for shading_reference in shading_references:
+        matrix = median_filter_task.submit(
+            shading_reference=shading_reference,
+            filter_size=filter_size)
 
-    write_median_filter_info_md.submit(matrix=matrix,
-                                       name=get_run_context().flow.name,
-                                       shading_reference=shading_reference,
-                                       filter_size=filter_size,
-                                       context=get_prefect_context(
-                                           get_run_context())
-                                       )
+        write_median_filter_info_md.submit(matrix=matrix,
+                                           name=get_run_context().flow.name,
+                                           shading_reference=shading_reference,
+                                           filter_size=filter_size,
+                                           context=get_prefect_context(
+                                               get_run_context())
+                                           )
+

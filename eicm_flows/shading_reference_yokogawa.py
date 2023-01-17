@@ -3,6 +3,7 @@ from datetime import datetime
 from enum import Enum
 from glob import glob
 from os.path import basename, join, splitext
+from pathlib import Path
 from typing import Literal, Tuple, Dict
 
 import numpy as np
@@ -27,10 +28,7 @@ Microscopes = Literal[
 
 
 @task(cache_key_fn=task_input_hash)
-def create_shading_reference(input_dir: str, z_plane: int, output_dir: str):
-    if input_dir.endswith("/"):
-        # Remove slash at the end
-        input_dir = input_dir[:-1]
+def create_shading_reference(input_dir: Path, z_plane: int, output_dir: Path):
 
     acq_date, px_size, px_unit, channels = get_metadata(input_dir=input_dir)
     plate_name = basename(input_dir)
@@ -71,8 +69,8 @@ def create_shading_reference(input_dir: str, z_plane: int, output_dir: str):
 @task(cache_key_fn=task_input_hash)
 def write_info_md(references: Tuple[ImageTarget],
                   name: str,
-                  input_dir: str, z_plane: int, microscope: str, group: str,
-                  output_dir: str, context: Dict):
+                  input_dir: Path, z_plane: int, microscope: str, group: str,
+                  output_dir: Path, context: Dict):
     date = datetime.now().strftime("%Y/%m/%d, %H:%M:%S")
     eicm_version = pkg_resources.get_distribution("eicm").version
     flow_repo = "https://github.com/fmi-faim/prefect-workflows/blob/main/eicm_flows"
@@ -146,13 +144,14 @@ GROUPS = Choices.load("fmi-groups").get()
               "maximum": 2,
           },
       ))
-def create_shading_reference_yokogawa(input_dir: str =
-                                      "/tungstenfs/scratch/gmicro/reitsabi/CV7000/Flatfield_correction_tests/20221221-Field-illumination-QC_20221221_143935/Dyes_60xW_Cellvis/",
+def create_shading_reference_yokogawa(input_dir: Path =
+                                      Path("/tungstenfs/scratch/gmicro/reitsabi/CV7000/Flatfield_correction_tests/20221221-Field-illumination-QC_20221221_143935/Dyes_60xW_Cellvis/"),
                                       microscope: Microscopes = "CV7000",
                                       z_plane: int = 33,
                                       group: GROUPS = GROUPS.gmicro,
-                                      output_dir: str = LocalFileSystem.load(
-                                          "tungsten-gmicro-hcs").basepath):
+                                      output_dir: Path =
+                                      Path(LocalFileSystem.load(
+                                          "tungsten-gmicro-hcs").basepath)):
     output_dir_ = join(output_dir, group.value, microscope, "Maintenance",
                       "Shading_Reference")
 

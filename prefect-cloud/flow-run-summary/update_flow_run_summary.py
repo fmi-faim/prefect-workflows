@@ -2,6 +2,7 @@ import argparse
 import configparser
 import json
 import subprocess
+from asyncio import sleep
 
 import yaml
 from prefect import task, get_client, flow, get_run_logger
@@ -52,12 +53,38 @@ async def get_flow_run(record, client):
 
 @task(retries=3)
 async def get_task_run_stats(record, client):
+    flow_run_id = record["fields"]["flow-run-id"]
+
+    total_tr = []
+    offset = 0
+
     tr = await client.read_task_runs(
-                                 flow_run_filter=FlowRunFilter(id=FlowRunFilterId(any_=[record["fields"]["flow-run-id"]])))
-    completed_task_runs = list(filter(lambda t: t.state.type == StateType.COMPLETED, tr))
-    failed_task_runs = list(filter(lambda t: t.state.type == StateType.FAILED, tr))
-    crashed_task_runs = list(filter(lambda t: t.state.type == StateType.CRASHED, tr))
-    cancelled_task_runs = list(filter(lambda t: t.state.type == StateType.CANCELLED, tr))
+        flow_run_filter=FlowRunFilter(
+            id=FlowRunFilterId(any_=[flow_run_id])),
+        limit=200,
+        offset=offset,
+    )
+    total_tr.extend(tr)
+
+    while len(tr) > 0:
+        offset += 200
+        tr = await client.read_task_runs(
+            flow_run_filter=FlowRunFilter(
+                id=FlowRunFilterId(any_=[flow_run_id])),
+            limit=200,
+            offset=offset,
+        )
+        total_tr.extend(tr)
+
+    completed_task_runs = list(
+        filter(lambda t: t.state.type == StateType.COMPLETED, total_tr))
+    failed_task_runs = list(
+        filter(lambda t: t.state.type == StateType.FAILED, total_tr))
+    crashed_task_runs = list(
+        filter(lambda t: t.state.type == StateType.CRASHED, total_tr))
+    cancelled_task_runs = list(
+        filter(lambda t: t.state.type == StateType.CANCELLED, total_tr))
+
     return len(tr), len(completed_task_runs), len(cancelled_task_runs), len(failed_task_runs), len(crashed_task_runs)
 
 

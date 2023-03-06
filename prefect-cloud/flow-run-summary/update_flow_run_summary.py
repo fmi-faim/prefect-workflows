@@ -3,6 +3,7 @@ import configparser
 import json
 import subprocess
 from asyncio import sleep
+from urllib.error import HTTPError
 
 import yaml
 from prefect import task, get_client, flow, get_run_logger
@@ -168,7 +169,13 @@ def build_log_entry(record, flow_run, task_run_stats):
 
 @task(retries=3)
 def update_airtable(row, record, flow_run_summary, flow_run_log):
-    flow_run_summary.create(row)
+    try:
+        flow_run_summary.create(row)
+    except Exception as e:
+        get_run_logger().warning(f'Could not upload the following row: '
+                                 f'{str(row)}')
+        get_run_logger().warning(e)
+
     flow_run_log.update(record["id"], fields={"processed": True})
 
 

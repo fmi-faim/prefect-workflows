@@ -116,6 +116,19 @@ def get_resource_summary(info):
 
     return compute_time, n_cpus, memory, gres
 
+
+def truncate_params(params: dict):
+    params_trunc = {}
+    for k, v in params.items():
+        if isinstance(v, dict):
+            params_trunc[k] = truncate_params(v)
+
+        if isinstance(v, list):
+            params_trunc[k] = v[:10]
+
+    return params_trunc
+
+
 def build_log_entry(record, flow_run, task_run_stats):
     row = None
 
@@ -127,6 +140,9 @@ def build_log_entry(record, flow_run, task_run_stats):
 
         n_tr, completed_tr, cancelled_tr, failed_tr, crashed_tr = task_run_stats
 
+        # Truncate list parameters to 10 entries.
+        parameters = truncate_params(flow_run.parameters)
+
         row = {}
         row["flow-run-id"] = record["fields"]["flow-run-id"]
         row["slurm-jobs"] = record["fields"]["slurm-jobs"]
@@ -137,7 +153,7 @@ def build_log_entry(record, flow_run, task_run_stats):
         row["deployment-id"] = str(flow_run.deployment_id)
         row["work-queue-name"] = flow_run.work_queue_name
         row["flow-version"] = flow_run.flow_version
-        row["parameters"] = json.dumps(flow_run.parameters)
+        row["parameters"] = json.dumps(parameters)
         row["tags"] = json.dumps(flow_run.tags)
         if flow_run.start_time is None:
             row["flow-start"] = record["fields"]["date"]
@@ -171,12 +187,11 @@ def build_log_entry(record, flow_run, task_run_stats):
 def update_airtable(row, record, flow_run_summary, flow_run_log):
     try:
         flow_run_summary.create(row)
+        flow_run_log.update(record["id"], fields={"processed": True})
     except Exception as e:
         get_run_logger().warning(f'Could not upload the following row: '
                                  f'{str(row)}')
         get_run_logger().warning(e)
-
-    flow_run_log.update(record["id"], fields={"processed": True})
 
 
 @flow(

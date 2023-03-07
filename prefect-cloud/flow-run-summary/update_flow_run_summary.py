@@ -86,7 +86,8 @@ async def get_task_run_stats(record, client):
     cancelled_task_runs = list(
         filter(lambda t: t.state.type == StateType.CANCELLED, total_tr))
 
-    return len(tr), len(completed_task_runs), len(cancelled_task_runs), len(failed_task_runs), len(crashed_task_runs)
+    return len(total_tr), len(completed_task_runs), len(cancelled_task_runs), \
+           len(failed_task_runs), len(crashed_task_runs)
 
 
 def get_resource_summary(info):

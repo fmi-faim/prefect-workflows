@@ -87,7 +87,7 @@ def write_median_filter_info_md(matrix: ImageTarget,
         cluster_class="dask_jobqueue.SLURMCluster",
         cluster_kwargs={
             "account": "dlthings",
-            "queue": "cpu_long",
+            "queue": "main",
             "cores": 2,
             "memory": "4 GB",
             "walltime": "1:00:00",

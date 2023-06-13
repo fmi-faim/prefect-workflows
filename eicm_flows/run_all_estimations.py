@@ -40,7 +40,7 @@ class PolynomialFit(BaseModel):
         cluster_class="dask_jobqueue.SLURMCluster",
         cluster_kwargs={
             "account": "dlthings",
-            "queue": "cpu_long",
+            "queue": "main",
             "cores": 2,
             "processes": 1,
             "memory": "4 GB",

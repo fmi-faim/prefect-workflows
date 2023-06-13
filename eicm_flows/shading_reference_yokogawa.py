@@ -18,7 +18,7 @@ from faim_prefect.prefect import get_prefect_context
 from prefect import flow, task, get_run_logger
 from prefect.context import get_run_context
 from prefect.filesystems import LocalFileSystem
-from prefect.software.pip import pkg_resources
+import pkg_resources
 from prefect_dask import DaskTaskRunner
 
 Microscopes = Literal[

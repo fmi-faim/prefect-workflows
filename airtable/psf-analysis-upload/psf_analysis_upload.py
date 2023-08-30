@@ -44,6 +44,68 @@ def connect_to_cloudinary(path):
     )
 
 
+def rename_columns(row: dict):
+    renamed = {
+        "ImageName": row["ImageName"],
+        "Date": row["Date"],
+        "Microscope": row["Microscope"],
+        "Magnification": row["Magnification"],
+        "NA": row["NA"],
+        "Amplitude_3D_XYZ": row["Amplitude"],
+        "Amplitude_2D_XY": row["Amplitude_2D"],
+        "Background_3D_XYZ": row["Background"],
+        "Background_2D_XY": row["Background_2D"],
+        "X_3D": row["X"],
+        "Y_3D": row["Y"],
+        "Z_3D": row["Z"],
+        "X_2D": row["X_2D"],
+        "Y_2D": row["Y_2D"],
+        "FWHM_3D_X": row["FWHM_X"],
+        "FWHM_3D_Y": row["FWHM_Y"],
+        "FWHM_3D_Z": row["FWHM_Z"],
+        "FWHM_2D_X": row["FWHM_X_2D"],
+        "FWHM_2D_Y": row["FWHM_Y_2D"],
+        "FWHM_PA1_3D": row["PrincipalAxis_1"],
+        "FWHM_PA2_3D": row["PrincipalAxis_2"],
+        "FWHM_PA3_3D": row["PrincipalAxis_3"],
+        "FWHM_PA1_2D": row["PrincipalAxis_1_2D"],
+        "FWHM_PA2_2D": row["PrincipalAxis_2_2D"],
+        "SignalToBG_3D_XYZ": row["SignalToBG"],
+        "SignalToBG_2D_XY": row["SignalToBG_2D"],
+        "XYpixelsize": row["XYpixelsize"],
+        "Zspacing": row["Zspacing"],
+        "cov_xx_3D": row["cov_xx"],
+        "cov_xy_3D": row["cov_xy"],
+        "cov_xz_3D": row["cov_xz"],
+        "cov_yy_3D": row["cov_yy"],
+        "cov_yz_3D": row["cov_yz"],
+        "cov_zz_3D": row["cov_zz"],
+        "cov_xx_2D": row["cov_xx_2D"],
+        "cov_xy_2D": row["cov_xy_2D"],
+        "cov_yy_2D": row["cov_yy_2D"],
+        "sde_amp_3D_XYZ": row["sde_peak"],
+        "sde_background_3D_XYZ": row["sde_background"],
+        "sde_X_3D": row["sde_X"],
+        "sde_Y_3D": row["sde_Y"],
+        "sde_Z_3D": row["sde_Z"],
+        "sde_cov_xx_3D": row["sde_cov_xx"],
+        "sde_cov_xy_3D": row["sde_cov_xy"],
+        "sde_cov_xz_3D": row["sde_cov_xz"],
+        "sde_cov_yy_3D": row["sde_cov_yy"],
+        "sde_cov_yz_3D": row["sde_cov_yz"],
+        "sde_cov_zz_3D": row["sde_cov_zz"],
+        "sde_amp_2D_XY": row["sde_peak_2D"],
+        "sde_background_2D_XY": row["sde_background_2D"],
+        "sde_X_2D": row["sde_X_2D"],
+        "sde_Y_2D": row["sde_Y_2D"],
+        "sde_cov_xx_2D": row["sde_cov_xx_2D"],
+        "sde_cov_xy_2D": row["sde_cov_xy_2D"],
+        "sde_cov_yy_2D": row["sde_cov_yy_2D"],
+        "version": row["version"],
+    }
+
+
+
 def upload(path, table, uploaded_dir):
     data = pd.read_csv(path)
     for i in range(len(data)):
@@ -51,92 +113,13 @@ def upload(path, table, uploaded_dir):
         import cloudinary.uploader
         response = cloudinary.uploader.upload(img_name)
 
-        # Create table row. Handle empty comments.
-        row = data.iloc[i][
-            [
-                "ImageName",
-                "Date",
-                "Microscope",
-                "Magnification",
-                "NA",
-                "Amplitude",
-                "Amplitude_2D",
-                "Background",
-                "Background_2D",
-                "X",
-                "Y",
-                "Z",
-                "X_2D",
-                "Y_2D",
-                "FWHM_X",
-                "FWHM_Y",
-                "FWHM_Z",
-                "FWHM_X_2D",
-                "FWHM_Y_2D",
-                "PrincipalAxis_1",
-                "PrincipalAxis_2",
-                "PrincipalAxis_3",
-                "PrincipalAxis_1_2D",
-                "PrincipalAxis_2_2D",
-                "SignalToBG",
-                "SignalToBG_2D",
-                "XYpixelsize",
-                "Zspacing",
-                "cov_xx",
-                "cov_xy",
-                "cov_xz",
-                "cov_yy",
-                "cov_yz",
-                "cov_zz",
-                "cov_xx_2D",
-                "cov_xy_2D",
-                "cov_yy_2D",
-                "sde_peak",
-                "sde_background",
-                "sde_X",
-                "sde_Y",
-                "sde_Z",
-                "sde_cov_xx",
-                "sde_cov_xy",
-                "sde_cov_xz",
-                "sde_cov_yy",
-                "sde_cov_yz",
-                "sde_cov_zz",
-                "sde_peak_2D",
-                "sde_background_2D",
-                "sde_X_2D",
-                "sde_Y_2D",
-                "sde_cov_xx_2D",
-                "sde_cov_xy_2D",
-                "sde_cov_yy_2D",
-                "version",
-            ]].to_dict()
+        version = data.iloc[i]["version"]
 
-        def add_field(name, r, cast):
-            if name in data.columns:
-                r[name] = cast(data.iloc[i][name])
-            else:
-                r[name] = None
-
-        add_field("sde_fwhm_x", row, float)
-        add_field("sde_fwhm_y", row, float)
-        add_field("sde_fwhm_z", row, float)
-        add_field("Objective_id", row, str)
-        add_field("Temperature", row, int)
-        add_field("AiryUnit", row, int)
-        add_field("BeadSize", row, int)
-        add_field("BeadSupplier", row, str)
-        add_field("MountingMedium", row, str)
-        add_field("Operator", row, str)
-        add_field("MicroscopeType", row, str)
-        add_field("Excitation", row, int)
-        add_field("Emission", row, int)
-        add_field("Comment", row, str)
-        add_field("End date", row, str)
-
-        row['Magnification'] = str(row['Magnification'])
-        if row["Objective_id"] is not None:
-            row["Objective_id"] = str(row["Objective_id"])
+        if version.startswith("0."):
+            row = create_row_v0(data, i)
+            row = rename_columns(row)
+        else:
+            row = create_row_v1(data, i)
 
         # Provide the url of the PSF image.
         # Airtable will fetch the image from there.
@@ -160,6 +143,190 @@ def upload(path, table, uploaded_dir):
         # Move the uploaded image to the uploaded directory.
         move(img_name, join(uploaded_dir,
                             basename(img_name)))
+
+
+def create_row_v0(data, i):
+    # Create table row. Handle empty comments.
+    row = data.iloc[i][
+        [
+            "ImageName",
+            "Date",
+            "Microscope",
+            "Magnification",
+            "NA",
+            "Amplitude",
+            "Amplitude_2D",
+            "Background",
+            "Background_2D",
+            "X",
+            "Y",
+            "Z",
+            "X_2D",
+            "Y_2D",
+            "FWHM_X",
+            "FWHM_Y",
+            "FWHM_Z",
+            "FWHM_X_2D",
+            "FWHM_Y_2D",
+            "PrincipalAxis_1",
+            "PrincipalAxis_2",
+            "PrincipalAxis_3",
+            "PrincipalAxis_1_2D",
+            "PrincipalAxis_2_2D",
+            "SignalToBG",
+            "SignalToBG_2D",
+            "XYpixelsize",
+            "Zspacing",
+            "cov_xx",
+            "cov_xy",
+            "cov_xz",
+            "cov_yy",
+            "cov_yz",
+            "cov_zz",
+            "cov_xx_2D",
+            "cov_xy_2D",
+            "cov_yy_2D",
+            "sde_peak",
+            "sde_background",
+            "sde_X",
+            "sde_Y",
+            "sde_Z",
+            "sde_cov_xx",
+            "sde_cov_xy",
+            "sde_cov_xz",
+            "sde_cov_yy",
+            "sde_cov_yz",
+            "sde_cov_zz",
+            "sde_peak_2D",
+            "sde_background_2D",
+            "sde_X_2D",
+            "sde_Y_2D",
+            "sde_cov_xx_2D",
+            "sde_cov_xy_2D",
+            "sde_cov_yy_2D",
+            "version",
+        ]].to_dict()
+
+    def add_field(name, r, cast):
+        if name in data.columns:
+            r[name] = cast(data.iloc[i][name])
+        else:
+            r[name] = None
+
+    add_field("sde_fwhm_x", row, float)
+    add_field("sde_fwhm_y", row, float)
+    add_field("sde_fwhm_z", row, float)
+    add_field("Objective_id", row, str)
+    add_field("Temperature", row, int)
+    add_field("AiryUnit", row, int)
+    add_field("BeadSize", row, int)
+    add_field("BeadSupplier", row, str)
+    add_field("MountingMedium", row, str)
+    add_field("Operator", row, str)
+    add_field("MicroscopeType", row, str)
+    add_field("Excitation", row, int)
+    add_field("Emission", row, int)
+    add_field("Comment", row, str)
+    add_field("End date", row, str)
+    row['Magnification'] = str(row['Magnification'])
+    if row["Objective_id"] is not None:
+        row["Objective_id"] = str(row["Objective_id"])
+    return row
+
+
+def create_row_v1(data, i):
+    # Create table row. Handle empty comments.
+    row = data.iloc[i][
+        [
+            "ImageName",
+            "Date",
+            "Microscope",
+            "Magnification",
+            "NA",
+            "Amplitude_1D_Z",
+            "Amplitude_2D_XY",
+            "Amplitude_3D_XYZ",
+            "Background_1D_Z",
+            "Background_2D_XY",
+            "Background_3D_XYZ",
+            "Z_1D",
+            "X_2D",
+            "Y_2D",
+            "X_3D",
+            "Y_3D",
+            "Z_3D",
+            "FWHM_1D_Z",
+            "FWHM_2D_X",
+            "FWHM_2D_Y",
+            "FWHM_3D_Z",
+            "FWHM_3D_Y",
+            "FWHM_3D_X",
+            "FWHM_PA1_2D",
+            "FWHM_PA2_2D",
+            "FWHM_PA1_3D",
+            "FWHM_PA2_3D",
+            "FWHM_PA3_3D",
+            "SignalToBG_1D_Z",
+            "SignalToBG_2D_XY",
+            "SignalToBG_3D_XYZ",
+            "XYpixelsize",
+            "Zspacing",
+            "cov_xx_3D",
+            "cov_xy_3D",
+            "cov_xz_3D",
+            "cov_yy_3D",
+            "cov_yz_3D",
+            "cov_zz_3D",
+            "cov_xx_2D",
+            "cov_xy_2D",
+            "cov_yy_2D",
+            "sde_amp_1D_Z",
+            "sde_amp_2D_XY",
+            "sde_amp_3D_XYZ",
+            "sde_background_1D_Z",
+            "sde_background_2D_XY",
+            "sde_background_3D_XYZ",
+            "sde_Z_1D",
+            "sde_X_2D",
+            "sde_Y_2D",
+            "sde_X_3D",
+            "sde_Y_3D",
+            "sde_Z_3D",
+            "sde_cov_xx_3D",
+            "sde_cov_xy_3D",
+            "sde_cov_xz_3D",
+            "sde_cov_yy_3D",
+            "sde_cov_yz_3D",
+            "sde_cov_zz_3D",
+            "sde_cov_xx_2D",
+            "sde_cov_xy_2D",
+            "sde_cov_yy_2D",
+            "version",
+        ]].to_dict()
+
+    def add_field(name, r, cast):
+        if name in data.columns:
+            r[name] = cast(data.iloc[i][name])
+        else:
+            r[name] = None
+
+    add_field("Objective_id", row, str)
+    add_field("Temperature", row, int)
+    add_field("AiryUnit", row, int)
+    add_field("BeadSize", row, int)
+    add_field("BeadSupplier", row, str)
+    add_field("MountingMedium", row, str)
+    add_field("Operator", row, str)
+    add_field("MicroscopeType", row, str)
+    add_field("Excitation", row, int)
+    add_field("Emission", row, int)
+    add_field("Comment", row, str)
+    add_field("End date", row, str)
+    row['Magnification'] = str(row['Magnification'])
+    if row["Objective_id"] is not None:
+        row["Objective_id"] = str(row["Objective_id"])
+    return row
+
 
 @task()
 def upload_and_move(files: List[str],

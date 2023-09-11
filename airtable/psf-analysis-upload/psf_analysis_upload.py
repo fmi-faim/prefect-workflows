@@ -103,6 +103,7 @@ def rename_columns(row: dict):
         "sde_cov_yy_2D": row["sde_cov_yy_2D"],
         "version": row["version"],
     }
+    return renamed
 
 
 

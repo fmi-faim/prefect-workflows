@@ -25,7 +25,7 @@ def list_files(airtable_config):
 def connect_to_table(airtable_config):
     api = Api(airtable_config['DEFAULT']['api_key'])
 
-    return api.get_table(airtable_config['DEFAULT']['base_id'],
+    return api.table(airtable_config['DEFAULT']['base_id'],
                          airtable_config['DEFAULT']['table_name'])
 
 
